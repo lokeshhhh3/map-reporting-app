@@ -1,52 +1,90 @@
 /* ===========================================================================
- * MapView.jsx  --  THE PLACE WHERE THE MAPS TEAM'S COMPONENT GOES
+ * MapView.jsx  --  THE MAP COMPONENT  (Leaflet + OpenStreetMap)
  * ===========================================================================
  *
- * RIGHT NOW this file draws a simple PLACEHOLDER map with HTML + CSS + SVG.
- * It already behaves like a real map:
- *   - it shows one pin for every report (using that report's lat/lng)
- *   - clicking it can hand back a latitude/longitude (for "Select on Map")
- *   - it has zoom buttons and a legend
+ * This is the real map. It shows a pin per report at the report's latitude and
+ * longitude, and it can hand back coordinates when the user clicks it.
  *
- * WHY: so the frontend team can finish the whole website today, without
- * waiting for a Google Maps API key.
- *
- * ---------------------------------------------------------------------------
- * STEP 5 OF THE PLAN - HOW TO PLUG IN THE MAPS TEAM'S COMPONENT
- * ---------------------------------------------------------------------------
- * The Maps Team will hand you a component. Ask them to accept EXACTLY these
- * props, and then you just delete the placeholder <div> below and drop their
- * component in (see the marked comment "SWAP HERE" further down):
- *
- *   <MapComponent
- *      reports={[...]}            // array of reports, each with lat + lng
- *      selectedLocation={loc}     // { lat, lng } or null  -> they draw the pin
- *      onMapClick={(lat,lng)=>…}  // user clicked/picked a point on the map
- *      onMarkerClick={(report)=>…}// user clicked a pin
- *      activeId="r-1001"          // which pin should be highlighted (optional)
- *      height="520px"
- *   />
- *
- * WHAT WE SEND THEM  → reports (with lat/lng) and selectedLocation
- * WHAT THEY SEND US  → onMapClick(lat, lng) and onMarkerClick(report)
+ * WHY LEAFLET AND NOT GOOGLE MAPS:
+ *   * No API key, no Google Cloud account, no credit card, no billing.
+ *   * Free for this kind of use, forever.
+ *   * It looks and behaves like a normal map to your users.
  *
  * ---------------------------------------------------------------------------
- * IMPORTANT: no page talks to Google Maps directly. Every page uses <MapView/>
- * or <MiniMap/>. That is why replacing the placeholder is a 10-line job.
+ * THE PROPS CONTRACT (this is what every page uses)
+ * ---------------------------------------------------------------------------
+ *   reports            array of reports, each with lat + lng -> one pin each
+ *   selectedLocation   { lat, lng } or null -> the pin the user just picked
+ *   onMapClick         called with (lat, lng) when the user clicks the map
+ *   onMarkerClick      called with the report when a pin is clicked
+ *   activeId           which pin to highlight
+ *   height             how tall the map box should be, e.g. '520px'
+ *
+ * Nothing outside this file imports Leaflet. Every page uses <MapView /> or
+ * <MiniMap />. If you ever switch to Google Maps, you rewrite ONLY this file.
+ *
+ * ---------------------------------------------------------------------------
+ * HOW THE MAP IS BUILT (so you can explain it)
+ * ---------------------------------------------------------------------------
+ * Leaflet draws the map inside a normal <div>. We give it:
+ *   1. a tile layer  -- the pictures of streets, downloaded from
+ *                       OpenStreetMap (the "© OpenStreetMap contributors" text
+ *                       you see in the corner is required by their licence)
+ *   2. markers       -- one Leaflet marker per report. We use a custom
+ *                       "divIcon", which means the pin is our own HTML using
+ *                       our own CSS classes (.mrp-pin), so it matches the
+ *                       colours used everywhere else in the app.
  * ===========================================================================
  */
 
-import { useMemo, useState } from 'react'
-import {
-  DEFAULT_BOUNDS,
-  formatLatLng,
-  isInside,
-  projectPoint,
-  slugify,
-  unprojectPoint,
-  zoomBounds,
-} from '../utils/mapMath.js'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
+import { DEFAULT_BOUNDS, formatLatLng, slugify } from '../utils/mapMath.js'
 import { TYPE_ICONS } from '../utils/constants.js'
+
+// The map pictures come from OpenStreetMap's public tile servers.
+const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+const TILE_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors'
+
+/** Are these two numbers usable as a map position? */
+function hasPosition(item) {
+  return item && typeof item.lat === 'number' && typeof item.lng === 'number'
+}
+
+/** The HTML for one report pin. Leaflet drops this inside our icon wrapper. */
+function pinMarkup(report) {
+  const icon = TYPE_ICONS[report.type] || '📍'
+  return `<span class="mrp-pin__bubble"><span class="mrp-pin__glyph">${icon}</span></span><span class="mrp-pin__tail"></span>`
+}
+
+/** The HTML for the pin the user just picked on the report form. */
+const PICKED_MARKUP =
+  '<span class="mrp-picked__pulse"></span><span class="mrp-picked__dot"></span>'
+
+/**
+ * Leaflet needs an icon object, not just HTML. A "divIcon" means:
+ * "draw this HTML, positioned so its bottom point sits on the coordinate."
+ */
+function reportIcon(report) {
+  return L.divIcon({
+    className: `mrp-pin mrp-pin--${slugify(report.type)}`,
+    html: pinMarkup(report),
+    iconSize: [34, 44],
+    iconAnchor: [17, 42], // the tip of the pin, in pixels from its top-left
+    tooltipAnchor: [0, -38],
+  })
+}
+
+function pickedIcon() {
+  return L.divIcon({
+    className: 'mrp-picked',
+    html: PICKED_MARKUP,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  })
+}
 
 export default function MapView({
   reports = [],
@@ -57,122 +95,257 @@ export default function MapView({
   height = '520px',
   showLegend = true,
   showZoom = true,
-  initialBounds = DEFAULT_BOUNDS,
-  showNote = true,
+  initialBounds = null,
 }) {
-  // "bounds" = the area of the world we are currently showing.
-  // Zooming just makes this box smaller; nothing else changes.
-  const [bounds, setBounds] = useState(initialBounds)
+  const containerRef = useRef(null) // the <div> Leaflet draws into
+  const mapRef = useRef(null) // the Leaflet map object
+  const markersRef = useRef(new Map()) // report id -> Leaflet marker
+  const pickedRef = useRef(null) // the "just picked" marker
+  const reportsByIdRef = useRef(new Map()) // report id -> newest report object
+  const hasFramedRef = useRef(false) // have we set the initial view yet?
+  const [mapReady, setMapReady] = useState(false)
+  const [zoom, setZoom] = useState(12)
 
-  // Which pins are inside the visible box right now?
-  const visibleReports = useMemo(
-    () => reports.filter((report) => isInside(report.lat, report.lng, bounds)),
-    [reports, bounds],
-  )
+  // Leaflet event handlers are created ONCE, so they would otherwise keep
+  // seeing old versions of our functions. This ref always holds the newest.
+  const handlersRef = useRef({ onMapClick, onMarkerClick })
+  useEffect(() => {
+    handlersRef.current = { onMapClick, onMarkerClick }
+  }, [onMapClick, onMarkerClick])
 
-  const selectedPosition = selectedLocation && isInside(selectedLocation.lat, selectedLocation.lng, bounds)
-    ? projectPoint(selectedLocation.lat, selectedLocation.lng, bounds)
-    : null
+  // The area to show if nobody told us what to show:
+  // a caller-provided window (MiniMap) wins, otherwise we frame the pins.
+  const fallbackBounds = useMemo(() => initialBounds || DEFAULT_BOUNDS, [initialBounds])
 
-  // Click anywhere on the map -> convert screen position to lat/lng.
-  function handleCanvasClick(event) {
-    if (!onMapClick) return
-    const rect = event.currentTarget.getBoundingClientRect()
-    const xPercent = ((event.clientX - rect.left) / rect.width) * 100
-    const yPercent = ((event.clientY - rect.top) / rect.height) * 100
-    const { lat, lng } = unprojectPoint(xPercent, yPercent, bounds)
-    onMapClick(Number(lat.toFixed(6)), Number(lng.toFixed(6)))
+  // -------------------------------------------------------------------------
+  // 1. Create the map. Runs once.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    if (mapRef.current || !containerRef.current) return
+
+    const map = L.map(containerRef.current, {
+      zoomControl: false, // we draw our own + / - buttons
+      attributionControl: true, // required by OpenStreetMap's licence
+      scrollWheelZoom: false, // stops the map stealing the page scroll
+    })
+
+    L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map)
+
+    const start = fallbackBounds
+    map.setView([(start.north + start.south) / 2, (start.east + start.west) / 2], 12)
+
+    // Clicking the map gives the page the latitude and longitude.
+    map.on('click', (event) => {
+      const handler = handlersRef.current.onMapClick
+      if (!handler) return
+      handler(Number(event.latlng.lat.toFixed(6)), Number(event.latlng.lng.toFixed(6)))
+    })
+
+    // Standard Leaflet trick: the page keeps scrolling normally until the user
+    // deliberately clicks the map, then the wheel starts zooming.
+    map.on('click', () => map.scrollWheelZoom.enable())
+    map.on('mouseout', () => map.scrollWheelZoom.disable())
+
+    map.on('zoomend', () => setZoom(map.getZoom()))
+
+    mapRef.current = map
+    setZoom(map.getZoom())
+    setMapReady(true)
+
+    // If the container was still being laid out when the map was created,
+    // Leaflet measured the wrong size. This makes it measure again.
+    const timer = setTimeout(() => map.invalidateSize(), 250)
+
+    return () => {
+      clearTimeout(timer)
+      map.remove() // Leaflet requires this or the <div> stays "used"
+      mapRef.current = null
+      markersRef.current.clear()
+      pickedRef.current = null
+      hasFramedRef.current = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // -------------------------------------------------------------------------
+  // 2. Set the first view: the caller's window, or all the pins, once.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || hasFramedRef.current) return
+
+    if (initialBounds) {
+      map.fitBounds(
+        [
+          [initialBounds.south, initialBounds.west],
+          [initialBounds.north, initialBounds.east],
+        ],
+        { animate: false },
+      )
+      hasFramedRef.current = true
+      return
+    }
+
+    const points = reports.filter(hasPosition).map((report) => [report.lat, report.lng])
+    if (points.length > 1) {
+      map.fitBounds(L.latLngBounds(points).pad(0.2), { animate: false, maxZoom: 15 })
+      hasFramedRef.current = true
+    } else if (points.length === 1) {
+      map.setView(points[0], 14, { animate: false })
+      hasFramedRef.current = true
+    }
+  }, [reports, initialBounds])
+
+  // -------------------------------------------------------------------------
+  // 3. Keep one marker per report. Runs whenever the list changes
+  //    (for example when the user types in the search box).
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    // Remember the newest version of every report, so a pin click always
+    // reports current information even if the list was filtered since.
+    const byId = new Map()
+    reports.forEach((report) => byId.set(report.id, report))
+    reportsByIdRef.current = byId
+
+    const markers = markersRef.current
+    const seen = new Set()
+
+    reports.forEach((report) => {
+      if (!hasPosition(report)) return
+      seen.add(report.id)
+
+      const position = [report.lat, report.lng]
+      let marker = markers.get(report.id)
+
+      if (marker) {
+        // Already drawn: just move it if the coordinates changed.
+        marker.setLatLng(position)
+        return
+      }
+
+      marker = L.marker(position, {
+        icon: reportIcon(report),
+        title: report.title,
+        riseOnHover: true,
+      })
+
+      marker.bindTooltip(report.title, {
+        direction: 'top',
+        className: 'mrp-tooltip',
+      })
+
+      marker.on('click', (event) => {
+        L.DomEvent.stopPropagation(event) // don't also fire "user clicked map"
+        const handler = handlersRef.current.onMarkerClick
+        if (!handler) return
+        handler(reportsByIdRef.current.get(report.id) || report)
+      })
+
+      marker.addTo(map)
+      markers.set(report.id, marker)
+    })
+
+    // Remove pins for reports that are no longer being shown.
+    markers.forEach((marker, id) => {
+      if (!seen.has(id)) {
+        marker.remove()
+        markers.delete(id)
+      }
+    })
+  }, [reports])
+
+  // -------------------------------------------------------------------------
+  // 4. Draw the pin the user picked on the report form.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    if (!hasPosition(selectedLocation)) {
+      if (pickedRef.current) {
+        pickedRef.current.remove()
+        pickedRef.current = null
+      }
+      return
+    }
+
+    const position = [selectedLocation.lat, selectedLocation.lng]
+
+    if (pickedRef.current) {
+      pickedRef.current.setLatLng(position)
+    } else {
+      pickedRef.current = L.marker(position, {
+        icon: pickedIcon(),
+        interactive: false,
+        zIndexOffset: 1000,
+      }).addTo(map)
+    }
+
+    map.panTo(position, { animate: true, duration: 0.4 })
+  }, [selectedLocation])
+
+  // -------------------------------------------------------------------------
+  // 5. Highlight the pin the page says is active.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    markersRef.current.forEach((marker, id) => {
+      const element = marker.getElement()
+      if (element) element.classList.toggle('is-active', id === activeId)
+    })
+  }, [activeId, reports, mapReady])
+
+  /** Re-frame the map on whatever it should be showing. */
+  function resetView() {
+    const map = mapRef.current
+    if (!map) return
+
+    if (initialBounds) {
+      map.fitBounds([
+        [initialBounds.south, initialBounds.west],
+        [initialBounds.north, initialBounds.east],
+      ])
+      return
+    }
+
+    const points = reports.filter(hasPosition).map((report) => [report.lat, report.lng])
+    if (points.length) {
+      map.fitBounds(L.latLngBounds(points).pad(0.2), { maxZoom: 15 })
+    } else {
+      map.setView([(DEFAULT_BOUNDS.north + DEFAULT_BOUNDS.south) / 2, (DEFAULT_BOUNDS.east + DEFAULT_BOUNDS.west) / 2], 12)
+    }
   }
 
+  const pinsInView = reports.filter(hasPosition).length
+
   return (
-    <div className={`map-view ${onMapClick ? 'map-view--pickable' : ''}`} style={{ height }}>
-      {/* ================================================================ */}
-      {/* SWAP HERE (Step 5): replace the whole <div className="map-view__canvas">
-          block with the Maps Team's component and keep the props listed above. */}
-      {/* ================================================================ */}
+    <div className="map-view" style={{ height }}>
+      {/* Leaflet draws the whole map inside this one <div> */}
       <div
-        className="map-view__canvas"
-        onClick={handleCanvasClick}
-        role={onMapClick ? 'button' : undefined}
-        tabIndex={onMapClick ? 0 : undefined}
+        ref={containerRef}
+        className={`map-view__canvas ${onMapClick ? 'map-view__canvas--pickable' : ''}`}
         aria-label={onMapClick ? 'Map. Click a point to choose a location.' : 'Map of reports'}
-      >
-        {/* Decorative "streets / river / park" background. It is only drawing -
-            pointer-events are switched off in the CSS so clicks reach the map. */}
-        <svg className="map-view__decor" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <rect width="100" height="100" fill="#eef2f7" />
-          <path d="M0 68 C 18 60, 30 74, 46 66 S 74 50, 100 58 L100 72 C 72 64, 60 80, 44 80 S 16 74, 0 80 Z" fill="#cfe4f7" opacity="0.9" />
-          <g stroke="#dbe3ec" strokeWidth="0.6">
-            <path d="M0 12 H100" /> <path d="M0 30 H100" /> <path d="M0 47 H100" /> <path d="M0 88 H100" />
-            <path d="M14 0 V100" /> <path d="M33 0 V100" /> <path d="M52 0 V100" /> <path d="M71 0 V100" /> <path d="M88 0 V100" />
-          </g>
-          <g stroke="#ffffff" strokeWidth="2.4" fill="none" opacity="0.95">
-            <path d="M0 30 C 22 30, 30 22, 52 22 S 82 30, 100 26" />
-            <path d="M14 0 C 16 30, 10 62, 18 100" />
-            <path d="M52 0 C 50 34, 58 70, 52 100" />
-            <path d="M0 47 C 30 44, 62 52, 100 47" />
-          </g>
-          <g fill="#d8ecd4">
-            <rect x="56" y="8" width="12" height="9" rx="1.5" />
-            <rect x="74" y="52" width="12" height="10" rx="1.5" />
-            <rect x="20" y="52" width="10" height="8" rx="1.5" />
-          </g>
-        </svg>
+      />
 
-        {/* One pin per report */}
-        {visibleReports.map((report) => {
-          const { x, y } = projectPoint(report.lat, report.lng, bounds)
-          const isActive = activeId && activeId === report.id
-          return (
-            <button
-              key={report.id}
-              type="button"
-              className={`map-pin map-pin--${slugify(report.type)} ${isActive ? 'is-active' : ''}`}
-              style={{ left: `${x}%`, top: `${y}%` }}
-              title={`${report.title} (${report.status})`}
-              aria-label={`${report.title}, ${report.type}, status ${report.status}`}
-              onClick={(event) => {
-                event.stopPropagation() // don't also trigger "pick a location"
-                if (onMarkerClick) onMarkerClick(report)
-              }}
-            >
-              <span className="map-pin__bubble" aria-hidden="true">
-                {TYPE_ICONS[report.type] || '📍'}
-              </span>
-              <span className="map-pin__tail" aria-hidden="true" />
-              <span className="map-pin__label">{report.title}</span>
-            </button>
-          )
-        })}
-
-        {/* The point the user just selected (comes from the Report form) */}
-        {selectedPosition ? (
-          <div className="map-picked" style={{ left: `${selectedPosition.x}%`, top: `${selectedPosition.y}%` }}>
-            <span className="map-picked__pulse" aria-hidden="true" />
-            <span className="map-picked__dot" aria-hidden="true" />
-            <span className="map-picked__label">Selected location</span>
-          </div>
-        ) : null}
-
-        {onMapClick ? <p className="map-view__hint">Click anywhere on the map to drop the pin</p> : null}
-      </div>
-
-      {/* ---- controls ---- */}
       {showZoom ? (
         <div className="map-view__controls">
-          <button type="button" aria-label="Zoom in" onClick={() => setBounds((b) => zoomBounds(b, 0.6))}>
+          <button type="button" aria-label="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
             +
           </button>
-          <button type="button" aria-label="Zoom out" onClick={() => setBounds((b) => zoomBounds(b, 1.6))}>
+          <button type="button" aria-label="Zoom out" onClick={() => mapRef.current?.zoomOut()}>
             −
           </button>
-          <button type="button" aria-label="Reset view" onClick={() => setBounds(initialBounds)}>
+          <button type="button" aria-label="Reset view" onClick={resetView}>
             ⟲
           </button>
         </div>
       ) : null}
 
-      <div className={`map-view__footer ${showLegend ? '' : 'map-view__footer--plain'}`}>
+      {onMapClick ? <p className="map-view__hint">Click anywhere on the map to drop the pin</p> : null}
+
+      <div className="map-view__footer">
         {showLegend ? (
           <ul className="map-legend">
             {['Complaint', 'Incident', 'Announcement', 'Event', 'Other'].map((type) => (
@@ -185,17 +358,11 @@ export default function MapView({
         ) : null}
 
         <span className="map-view__coords">
-          {selectedLocation
+          {hasPosition(selectedLocation)
             ? `📍 ${formatLatLng(selectedLocation.lat, selectedLocation.lng)}`
-            : `${visibleReports.length} of ${reports.length} pins in view`}
+            : `${pinsInView} pin${pinsInView === 1 ? '' : 's'} · zoom ${zoom}`}
         </span>
       </div>
-
-      {showNote ? (
-        <p className="map-view__note">
-          Placeholder map (frontend team) · replaced by the Maps Team&apos;s Google Maps component in Step 5
-        </p>
-      ) : null}
     </div>
   )
 }

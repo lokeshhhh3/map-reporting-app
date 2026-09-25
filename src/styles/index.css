@@ -857,9 +857,16 @@ code {
   margin: 12px 0;
 }
 
-/* ---- the map box ---- */
+/* ---------------------------------------------------------------------------
+   THE MAP  (Leaflet + OpenStreetMap)
+   Leaflet draws the map inside .map-view__canvas. We only style the frame
+   around it, our own + / - buttons, and our own pins.
+   --------------------------------------------------------------------------- */
+
 .map-view {
   position: relative;
+  display: flex;
+  flex-direction: column;
   border-radius: var(--radius);
   overflow: hidden;
   border: 1px solid var(--slate-200);
@@ -867,40 +874,24 @@ code {
   box-shadow: var(--shadow-sm);
 }
 
+/* The box Leaflet draws into. It must be able to shrink inside the flex
+   column, which is what min-height: 0 does. */
 .map-view__canvas {
   position: relative;
+  z-index: 0;
+  flex: 1 1 auto;
+  min-height: 140px;
   width: 100%;
-  height: 100%;
-  overflow: hidden;
 }
 
-.map-view--pickable .map-view__canvas {
-  cursor: crosshair;
-}
-
-.map-view__decor {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none; /* decorative only — clicks pass through to the map */
-}
-
-/* ---- a pin for one report ---- */
-.map-pin {
-  position: absolute;
-  transform: translate(-50%, -100%);
-  background: none;
-  border: none;
-  padding: 0;
+/* In Leaflet, a marker is just an HTML element on top of the map, so we can
+   change the cursor ourselves. */
+.mrp-pin {
   cursor: pointer;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
 }
 
-.map-pin__bubble {
+/* The teardrop shape: a square with three rounded corners, rotated 45deg. */
+.mrp-pin__bubble {
   width: 34px;
   height: 34px;
   border-radius: 50% 50% 50% 0;
@@ -913,70 +904,46 @@ code {
   transition: transform 0.15s ease;
 }
 
-.map-pin__bubble > * {
+/* Undo the rotation for the emoji inside, so it stays upright. */
+.mrp-pin__glyph {
   transform: rotate(45deg);
-}
-
-.map-pin__bubble {
   font-size: 0.95rem;
   line-height: 1;
 }
 
-.map-pin--complaint .map-pin__bubble { background: var(--red-600); }
-.map-pin--incident .map-pin__bubble { background: #ea580c; }
-.map-pin--announcement .map-pin__bubble { background: var(--blue-600); }
-.map-pin--event .map-pin__bubble { background: var(--purple-600); }
-.map-pin--other .map-pin__bubble { background: var(--slate-500); }
-
-.map-pin__tail {
+.mrp-pin__tail {
+  display: block;
   width: 8px;
   height: 8px;
+  margin: -1px auto 0;
   background: rgba(15, 23, 42, 0.25);
   border-radius: 50%;
-  margin-top: 2px;
 }
 
-.map-pin__label {
-  position: absolute;
-  top: -22px;
-  background: var(--slate-900);
-  color: #fff;
-  font-size: 0.72rem;
-  padding: 3px 8px;
-  border-radius: 6px;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
+/* One colour per report type - same palette as the badges and the legend */
+.mrp-pin--complaint .mrp-pin__bubble { background: var(--red-600); }
+.mrp-pin--incident .mrp-pin__bubble { background: #ea580c; }
+.mrp-pin--announcement .mrp-pin__bubble { background: var(--blue-600); }
+.mrp-pin--event .mrp-pin__bubble { background: var(--purple-600); }
+.mrp-pin--other .mrp-pin__bubble { background: var(--slate-500); }
+
+/* Grows when the user hovers, and stays big when the page marks it active */
+.mrp-pin:hover .mrp-pin__bubble,
+.mrp-pin.is-active .mrp-pin__bubble {
+  transform: rotate(-45deg) scale(1.2);
 }
 
-.map-pin:hover .map-pin__label,
-.map-pin:focus-visible .map-pin__label,
-.map-pin.is-active .map-pin__label {
-  opacity: 1;
+.mrp-pin.is-active {
+  z-index: 400;
 }
 
-.map-pin:hover .map-pin__bubble,
-.map-pin.is-active .map-pin__bubble {
-  transform: rotate(-45deg) scale(1.18);
-}
-
-.map-pin.is-active {
-  z-index: 4;
-}
-
-/* ---- the pin the user just selected---- */
-.map-picked {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+/* The pin the user picked on the Create Report page */
+.mrp-picked {
   pointer-events: none;
 }
 
-.map-picked__dot {
+.mrp-picked__dot {
+  display: block;
   width: 18px;
   height: 18px;
   border-radius: 50%;
@@ -985,8 +952,10 @@ code {
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.4);
 }
 
-.map-picked__pulse {
+.mrp-picked__pulse {
   position: absolute;
+  left: 0;
+  top: 0;
   width: 18px;
   height: 18px;
   border-radius: 50%;
@@ -999,35 +968,39 @@ code {
   100% { transform: scale(3.4); opacity: 0; }
 }
 
-.map-picked__label {
-  margin-top: 6px;
-  background: var(--blue-600);
+/* The label that appears above a pin on hover */
+.mrp-tooltip {
+  background: var(--slate-900);
   color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 8px;
   font-size: 0.72rem;
   font-weight: 600;
-  padding: 3px 9px;
-  border-radius: 999px;
-  white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.3);
 }
 
-.map-view__hint {
-  position: absolute;
-  left: 50%;
-  bottom: 14px;
-  transform: translateX(-50%);
-  background: rgba(15, 23, 42, 0.82);
-  color: #fff;
-  font-size: 0.8rem;
-  padding: 6px 14px;
-  border-radius: 999px;
-  margin: 0;
-  pointer-events: none;
+.mrp-tooltip::before {
+  border-top-color: var(--slate-900);
 }
 
+/* Leaflet's own attribution text, bottom right */
+.leaflet-container .leaflet-control-attribution {
+  font-size: 0.68rem;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 1px 6px;
+}
+
+.leaflet-container a {
+  color: var(--blue-600);
+}
+
+/* Our own zoom buttons, floating over the map */
 .map-view__controls {
   position: absolute;
   right: 12px;
   top: 12px;
+  z-index: 500; /* above Leaflet's panes */
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1045,13 +1018,32 @@ code {
   cursor: pointer;
   box-shadow: var(--shadow-sm);
   line-height: 1;
+  font-family: inherit;
 }
 
 .map-view__controls button:hover {
   background: var(--slate-100);
 }
 
+.map-view__hint {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  z-index: 500;
+  background: rgba(15, 23, 42, 0.82);
+  color: #fff;
+  font-size: 0.8rem;
+  padding: 6px 14px;
+  border-radius: 999px;
+  margin: 0;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .map-view__footer {
+  position: relative;
+  z-index: 500;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1060,10 +1052,7 @@ code {
   background: #fff;
   border-top: 1px solid var(--slate-200);
   padding: 8px 12px;
-}
-
-.map-view__footer--plain {
-  justify-content: flex-end;
+  flex: 0 0 auto;
 }
 
 .map-legend {
@@ -1108,13 +1097,10 @@ code {
   color: var(--slate-500);
 }
 
-.map-view__note {
-  margin: 0;
-  background: var(--amber-100);
-  color: var(--amber-700);
-  font-size: 0.74rem;
-  padding: 6px 12px;
-  text-align: center;
+/* On the report form, the map is a click target, so show a crosshair */
+.map-view__canvas--pickable,
+.map-view__canvas--pickable .leaflet-grab {
+  cursor: crosshair;
 }
 
 /* ---- the pin information panel on the Map page ---- */
@@ -2223,6 +2209,10 @@ code {
   .map-view__hint {
     font-size: 0.72rem;
     padding: 5px 10px;
+    bottom: 96px;
+    max-width: 88%;
+    white-space: normal;
+    text-align: center;
   }
 
   .photo-preview img {

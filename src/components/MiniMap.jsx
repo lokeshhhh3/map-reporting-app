@@ -31,7 +31,6 @@ export default function MiniMap({ lat, lng, report = null, height = '220px', tit
         height={height}
         showLegend={false}
         showZoom={false}
-        showNote={false}
         initialBounds={initialBounds}
       />
       <figcaption>

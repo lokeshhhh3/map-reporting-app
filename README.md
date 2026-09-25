@@ -2,7 +2,7 @@
 
 A shared map where people report and view what is happening in their local area. A user picks the exact spot on a map, adds a description, a report type and an optional photo, and submits it. That report then appears as a pin for everyone else.
 
-Built with **React + Vite**. This repository contains the **frontend only** — the Google Maps component and the Firebase backend are supplied by the other two teams and plug into two clearly marked files.
+Built with **React + Vite**, with real maps from **Leaflet + OpenStreetMap** (no API key, no billing account, free forever). This repository contains the **frontend only** — the Firebase backend is supplied by the Backend Team and plugs into one clearly marked file.
 
 ![Home page](docs/screenshots/home.jpg)
 
@@ -36,15 +36,9 @@ Built with **React + Vite**. This repository contains the **frontend only** — 
 
 ### Map page
 
-Every pin sits at that report's latitude and longitude. Filters above, report list on the right.
+A real OpenStreetMap with a pin per report at that report's latitude and longitude. Filters above, report list on the right. Clicking a pin highlights it and fills the information panel.
 
 ![Map page](docs/screenshots/map.jpg)
-
-### Clicking a pin
-
-The information panel on the right fills in with that report's type, status, description, coordinates and date.
-
-![Map page with a pin clicked](docs/screenshots/map-report-info.jpg)
 
 ### Create Report
 
@@ -118,7 +112,7 @@ map-reporting-app/
     ├── components/             reusable UI, used by two or more pages
     │   ├── Navbar.jsx          header, navigation, mobile menu
     │   ├── Footer.jsx
-    │   ├── MapView.jsx         ★ the map — placeholder, Maps Team replaces this
+    │   ├── MapView.jsx         ★ the map — Leaflet + OpenStreetMap
     │   ├── MiniMap.jsx         small map on the details page
     │   ├── ReportCard.jsx      one report as a card
     │   ├── ReportForm.jsx      the form fields + validation
@@ -178,28 +172,34 @@ map-reporting-app/
 | `Navbar` / `Footer` | every page | The shell |
 | `PageHeader` | Map, Reports, News, Events | Consistent page title block |
 
-## Team integration — the two plug-in points
+## Team integration
 
-The frontend is deliberately built around **two seams**, so neither Google Maps nor Firebase is referenced anywhere in the pages.
+No page or component imports a map library or Firebase. Everything outside this project plugs in through **one file each**, so the app keeps working on dummy data until the other teams deliver.
 
-### 1. Maps Team → `src/components/MapView.jsx`
+### The map — `src/components/MapView.jsx`
 
-`MapView` is currently a placeholder map drawn with HTML, CSS and SVG. It already behaves correctly: it shows a pin per report using real latitude/longitude, and it returns coordinates when the user clicks it.
+The map is real and already working: **Leaflet + OpenStreetMap**, with a pin per report at its latitude and longitude, click-to-pick-location, hover tooltips, custom zoom controls and a mini map variant.
 
-Replace the block marked `SWAP HERE (Step 5)` with the Maps Team's component, keeping the same props:
+Leaflet was chosen over Google Maps because it needs **no API key, no Google Cloud account, no billing and no credit card**. (Google Maps Platform has required a billing account with a card on file since 2018, retired its $200 monthly credit in March 2025, and has no spending cap by default.)
+
+`MapView` exposes a fixed props contract. Nothing outside this file imports Leaflet, so swapping the map library means rewriting this one file and nothing else:
 
 | Prop | Direction | Meaning |
 |---|---|---|
-| `reports` | frontend → maps | array of reports, each with `lat` and `lng` — they draw the pins |
-| `selectedLocation` | frontend → maps | `{ lat, lng }` or `null` — they draw the chosen pin |
-| `onMapClick` | maps → frontend | called with `(lat, lng)` when the user picks a point |
-| `onMarkerClick` | maps → frontend | called with the report when a pin is clicked |
-| `activeId` | frontend → maps | which pin to highlight |
-| `height` | frontend → maps | how tall the map box should be |
+| `reports` | page → map | array of reports, each with `lat` and `lng` — one pin each |
+| `selectedLocation` | page → map | `{ lat, lng }` or `null` — the pin the user just picked |
+| `onMapClick` | map → page | called with `(lat, lng)` when the user clicks the map |
+| `onMarkerClick` | map → page | called with the report when a pin is clicked |
+| `activeId` | page → map | which pin to highlight |
+| `height` | page → map | how tall the map box should be, e.g. `'520px'` |
+| `showLegend` / `showZoom` | page → map | optional; `MiniMap` turns both off |
+| `initialBounds` | page → map | optional; `MiniMap` uses it to frame one point |
 
 `MiniMap` wraps `MapView` for the details page and only needs `lat` and `lng`.
 
-### 2. Backend Team → `src/services/api.js`
+**If a Google Maps version is ever required**, rewrite `MapView.jsx` keeping the same props. No other file changes. Notes for that job: `google.maps.Marker` was deprecated in February 2024 in favour of `AdvancedMarkerElement`, which also requires creating a Map ID in the console.
+
+### The data — `src/services/api.js`
 
 No page or component imports Firebase. Every screen goes through six functions in this one file:
 
@@ -213,6 +213,15 @@ No page or component imports Firebase. Every screen goes through six functions i
 | `uploadReportPhoto(file)` | a photo file | `Promise<string>` (a URL) |
 
 Keep the names and the return shapes, replace what is inside them, and every page updates at once. Until then the app runs on the dummy data in `src/data/sampleData.js`.
+
+### What is left for the other teams
+
+| Task | Owner | Where it happens |
+|---|---|---|
+| Firebase database + storage | Backend Team | inside `src/services/api.js` |
+| Firebase photo upload | Backend Team | `src/services/photoUpload.js` |
+| Authentication (optional) | Backend Team | new file, not written yet |
+| A Google Maps version of the map (optional) | Maps Team / Frontend | rewrite `src/components/MapView.jsx` |
 
 ## The report data shape
 
@@ -249,20 +258,28 @@ Three breakpoints, all in `src/styles/index.css`:
 
 Test at **375px**, **768px** and **1280px**. On a phone connected to the same Wi-Fi, open the URL printed under `Network:` by `npm run dev`.
 
+![Map on a phone](docs/screenshots/mobile-map.jpg)
+
+### Requirements for the map
+
+The map downloads its tiles from OpenStreetMap over the internet, so it needs a normal connection. No API key or account is involved. The `© OpenStreetMap contributors` attribution is drawn by Leaflet and **must not be removed** — it is a condition of the free tile usage.
+
 ## What this repository does not contain
 
-Handled by the other teams:
+Handled by the other team:
 
-- Google Maps API integration, GPS and the real mini-map — **Maps Team**
-- Firebase database, photo storage, authentication — **Backend Team**
+- Firebase database, photo storage and authentication — **Backend Team**
 
-By design, the frontend also does not contain any Google Maps API key or Firebase credentials. When those are added, they must go in a `.env` file which is already gitignored — never committed.
+The map is **already real** (Leaflet + OpenStreetMap) and needs no key, account or billing. The only optional map work left is a Google Maps version, if one is ever required — see [Team integration](#team-integration).
+
+Any credentials added later (Firebase config, or a Google Maps key if one is ever used) must go in a `.env` file, which is already gitignored — never committed.
 
 ## Status
 
-- All pages built and working on dummy data.
-- Full flow verified end to end: open map → pick location → fill form → submit → report appears as a pin.
+- All pages built and working.
+- **Real map integration complete** — Leaflet + OpenStreetMap, no API key required.
+- Full flow verified end to end in a real browser: open map → click a pin → pick a location → submit → the new report appears as a pin. 19 of 19 automated checks passed with zero console errors.
 - Responsive at phone, tablet and desktop widths.
-- Awaiting the Maps Team's map component and the Backend Team's Firebase code.
+- Report data comes from dummy data until the Backend Team fills in Firebase inside `src/services/api.js`.
 
 See `START-HERE.md` for the original build plan and the step-by-step order this project was built in.
