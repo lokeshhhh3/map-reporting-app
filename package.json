@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --base=/map-reporting-app/ --host 0.0.0.0"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

@@ -1,0 +1,80 @@
+# ===========================================================================
+# Deploy to GitHub Pages
+# ===========================================================================
+# This file tells GitHub to build the website and publish it online EVERY TIME
+# you push to the main branch. You do not need to run anything yourself.
+#
+# Where it goes:  https://lokeshhhh3.github.io/map-reporting-app/
+#
+# If you rename the repository, change the "base" value in vite.config.js as
+# well, or the page will load with no styling and no map.
+# ===========================================================================
+
+name: Deploy to GitHub Pages
+
+on:
+  # Run every time something is pushed to the main branch
+  push:
+    branches: ['main']
+
+  # Also allow running it by hand from the Actions tab on GitHub
+  workflow_dispatch:
+
+# Permissions the workflow needs to publish the site
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deployment at a time. If you push twice quickly, the older run is
+# cancelled instead of fighting with the newer one.
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the website
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Download your repository onto the build machine
+      - name: Checkout the code
+        uses: actions/checkout@v7
+
+      # 2. Install Node.js (the same runtime you have on your laptop)
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # 3. Download the libraries. 'npm ci' is the strict version of
+      #    'npm install' -- it installs exactly what package-lock.json says,
+      #    so the online build matches your laptop.
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. Create the finished website in the dist/ folder
+      - name: Build the site
+        run: npm run build
+
+      # 5. Prepare the built files for publishing
+      - name: Set up Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload the built site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: './dist'
+
+  deploy:
+    name: Publish it online
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -4,6 +4,12 @@ A shared map where people report and view what is happening in their local area.
 
 Built with **React + Vite**, with real maps from **Leaflet + OpenStreetMap** (no API key, no billing account, free forever). This repository contains the **frontend only** — the Firebase backend is supplied by the Backend Team and plugs into one clearly marked file.
 
+### Live site
+
+**https://lokeshhhh3.github.io/map-reporting-app/**
+
+No setup needed — just open it in any browser, including on a phone. It rebuilds and republishes automatically on every push to `main`.
+
 ![Home page](docs/screenshots/home.jpg)
 
 ## Contents
@@ -11,6 +17,7 @@ Built with **React + Vite**, with real maps from **Leaflet + OpenStreetMap** (no
 - [What it does](#what-it-does)
 - [Screenshots](#screenshots)
 - [Getting started](#getting-started)
+- [Deployment](#deployment)
 - [Project structure](#project-structure)
 - [Pages](#pages)
 - [Reusable components](#reusable-components)
@@ -94,6 +101,7 @@ map-reporting-app/
 ├── vite.config.js              dev server configuration
 │
 ├── docs/screenshots/           images used by this README
+├── .github/workflows/deploy.yml  publishes the site on every push to main
 │
 └── src/
     ├── main.jsx                entry point — mounts React, enables routing
@@ -264,6 +272,39 @@ Test at **375px**, **768px** and **1280px**. On a phone connected to the same Wi
 
 The map downloads its tiles from OpenStreetMap over the internet, so it needs a normal connection. No API key or account is involved. The `© OpenStreetMap contributors` attribution is drawn by Leaflet and **must not be removed** — it is a condition of the free tile usage.
 
+## Deployment
+
+The site is published with **GitHub Pages** by a GitHub Actions workflow at `.github/workflows/deploy.yml`. Every push to `main` builds the site and puts it online — you never run a deploy command yourself.
+
+### Two settings that make it work
+
+Both are already configured. They exist because GitHub Pages serves a project at `https://<username>.github.io/<repository>/` — a **sub-folder**, not the domain root:
+
+1. **`base` in `vite.config.js`** — set to `/map-reporting-app/` when building, so the generated HTML links to `/map-reporting-app/assets/...` instead of `/assets/...`. During local development it stays `/`, so `npm run dev` keeps working at `http://localhost:5173/`.
+2. **`HashRouter` in `src/main.jsx`** — URLs look like `example.com/#/map` instead of `example.com/map`.
+
+### Why HashRouter
+
+GitHub Pages is a plain file server. It has no idea that the address `/map` should return our app, so with `BrowserRouter`:
+
+- clicking a link works, because the page never reloads
+- **but pressing F5, or opening a shared link directly, returns GitHub's 404 page**
+
+With `HashRouter` everything after the `#` stays in the browser. Links, refreshes, bookmarks and shared URLs all work. Everything else about routing is identical — `useParams`, `useNavigate` and `<Link>` behave the same way.
+
+### If the repository is renamed
+
+Change `base` in `vite.config.js` to match the new name, and update the `--base=` flag in the `preview` script in `package.json`. Otherwise the published page loads with no styling and no map.
+
+### Checking the production build locally
+
+```bash
+npm run build
+npm run preview
+```
+
+Then open <http://localhost:4173/map-reporting-app/>. This serves the built site from the same sub-path GitHub Pages uses, so it is a faithful check before you push.
+
 ## What this repository does not contain
 
 Handled by the other team:
@@ -280,6 +321,7 @@ Any credentials added later (Firebase config, or a Google Maps key if one is eve
 - **Real map integration complete** — Leaflet + OpenStreetMap, no API key required.
 - Full flow verified end to end in a real browser: open map → click a pin → pick a location → submit → the new report appears as a pin. 19 of 19 automated checks passed with zero console errors.
 - Responsive at phone, tablet and desktop widths.
+- **Published online** via GitHub Pages, with automatic redeploys on every push.
 - Report data comes from dummy data until the Backend Team fills in Firebase inside `src/services/api.js`.
 
 See `START-HERE.md` for the original build plan and the step-by-step order this project was built in.
