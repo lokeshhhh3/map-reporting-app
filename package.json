@@ -1,0 +1,21 @@
+{
+  "name": "map-reporting-app",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Frontend for the Map Reporting App - a shared map where people report and view local problems, incidents, news and events.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.8"
+  }
+}
