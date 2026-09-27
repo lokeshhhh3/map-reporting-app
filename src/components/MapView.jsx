@@ -228,7 +228,9 @@ export default function MapView({
 
       marker = L.marker(position, {
         icon: reportIcon(report),
-        title: report.title,
+        // No `title:` here on purpose. Leaflet's own tooltip below already
+        // shows the report name on hover, and a `title` would make the
+        // browser draw a second, black tooltip on top of it.
         riseOnHover: true,
       })
 
@@ -245,6 +247,12 @@ export default function MapView({
       })
 
       marker.addTo(map)
+
+      // Because the pin is a <div> (a "divIcon"), Leaflet ignores `alt`, so
+      // we give it its name for screen readers ourselves.
+      const pinElement = marker.getElement()
+      if (pinElement) pinElement.setAttribute('aria-label', report.title)
+
       markers.set(report.id, marker)
     })
 

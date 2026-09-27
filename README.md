@@ -88,7 +88,12 @@ Other commands:
 ```bash
 npm run build     # production build into dist/
 npm run preview   # serve the production build locally
+npm run seed      # copies the demo data into Firestore (after Firebase setup)
 ```
+
+### Connecting Firebase (optional)
+
+Without any setup the app runs on demo data. To use a real database, follow **[BACKEND-TEAM-TASK.md](BACKEND-TEAM-TASK.md)**. In short: create a Firebase project, copy `.env.example` to `.env` and paste in your six values, run `npm install firebase`, then `npm run seed`.
 
 > `npm install` must be run before `npm run dev`, and again if you move the folder to another computer. `node_modules` is not committed to this repository.
 
@@ -211,6 +216,8 @@ Leaflet was chosen over Google Maps because it needs **no API key, no Google Clo
 
 No page or component imports Firebase. Every screen goes through six functions in this one file:
 
+The app runs on demo data until a `.env` file with Firebase settings exists. If `.env` is missing or wrong, it falls back to demo data instead of failing — so the site can never be broken by a missing config.
+
 | Function | Input | Returns |
 |---|---|---|
 | `getReports()` | — | `Promise<Report[]>` |
@@ -223,6 +230,8 @@ No page or component imports Firebase. Every screen goes through six functions i
 Keep the names and the return shapes, replace what is inside them, and every page updates at once. Until then the app runs on the dummy data in `src/data/sampleData.js`.
 
 ### What is left for the other teams
+
+**Firebase:** the connection code is already written in `src/services/firebase.js` and `src/services/api.js`. All that remains is the Firebase console setup and a `.env` file — **[BACKEND-TEAM-TASK.md](BACKEND-TEAM-TASK.md)** is the step-by-step guide.
 
 | Task | Owner | Where it happens |
 |---|---|---|
@@ -322,6 +331,6 @@ Any credentials added later (Firebase config, or a Google Maps key if one is eve
 - Full flow verified end to end in a real browser: open map → click a pin → pick a location → submit → the new report appears as a pin. 19 of 19 automated checks passed with zero console errors.
 - Responsive at phone, tablet and desktop widths.
 - **Published online** via GitHub Pages, with automatic redeploys on every push.
-- Report data comes from dummy data until the Backend Team fills in Firebase inside `src/services/api.js`.
+- Report data comes from demo data until a Firebase project is connected via `.env` (see [BACKEND-TEAM-TASK.md](BACKEND-TEAM-TASK.md)). The code path for both is written and tested.
 
 See `START-HERE.md` for the original build plan and the step-by-step order this project was built in.

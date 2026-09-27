@@ -4,10 +4,11 @@
 # This file tells GitHub to build the website and publish it online EVERY TIME
 # you push to the main branch. You do not need to run anything yourself.
 #
-# Where it goes:  https://lokeshhhh3.github.io/map-reporting-app/
+# Where it goes:  https://<owner>.github.io/map-reporting-app/
 #
-# If you rename the repository, change the "base" value in vite.config.js as
-# well, or the page will load with no styling and no map.
+# The repository is named "map-reporting-app".
+# If that name ever changes, the "base" value in vite.config.js must be
+# changed to match, or the published page loads with no styling and no map.
 # ===========================================================================
 
 name: Deploy to GitHub Pages
@@ -55,8 +56,22 @@ jobs:
         run: npm ci
 
       # 4. Create the finished website in the dist/ folder
+      #
+      #    The Firebase settings are read from GitHub repository secrets.
+      #    They are NOT in the code, so if you have not added them yet these
+      #    are empty - and the site simply runs on the demo data. Nothing breaks.
+      #
+      #    To add them: repo -> Settings -> Secrets and variables -> Actions
+      #    -> New repository secret. Use these exact names.
       - name: Build the site
         run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
 
       # 5. Prepare the built files for publishing
       - name: Set up Pages
