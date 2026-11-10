@@ -103,6 +103,54 @@ export function formatDate(value) {
   })
 }
 
+/**
+ * Is this report inside the chosen date range?
+ *
+ * rangeValue comes straight from the "Reported" dropdown:
+ *   'all'   -> everything
+ *   'today' -> since midnight this morning
+ *   '7'     -> in the last 7 days          (any number of days works)
+ *
+ * A report with an unreadable date is KEPT rather than hidden - dropping
+ * something the user cannot see the reason for is worse than showing it.
+ */
+export function isWithinDateRange(reportedAt, rangeValue) {
+  if (!rangeValue || rangeValue === 'all') return true
+
+  const reported = new Date(reportedAt)
+  if (Number.isNaN(reported.getTime())) return true
+
+  const now = new Date()
+
+  if (rangeValue === 'today') {
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    return reported >= startOfToday
+  }
+
+  const days = Number(rangeValue)
+  if (!Number.isFinite(days) || days <= 0) return true
+
+  const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
+  return reported >= cutoff
+}
+
+/**
+ * The middle of a set of coordinates - used to centre the map on the
+ * reports that matched, and to work out distance when the user has not
+ * shared their own location.
+ */
+export function centreOf(points = []) {
+  const usable = points.filter((p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lng))
+  if (!usable.length) return null
+
+  const totals = usable.reduce(
+    (sum, point) => ({ lat: sum.lat + point.lat, lng: sum.lng + point.lng }),
+    { lat: 0, lng: 0 },
+  )
+
+  return { lat: totals.lat / usable.length, lng: totals.lng / usable.length }
+}
+
 /** Small helper used all over the UI: "Complaint" -> "complaint". */
 export function slugify(value = '') {
   return String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')

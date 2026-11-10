@@ -18,6 +18,9 @@
 //   getReports()              -> Promise<Report[]>
 //   getReportById(id)         -> Promise<Report | null>
 //   createReport(input)       -> Promise<Report>
+//   updateReport(id, input)   -> Promise<Report>      (own report, or moderator)
+//   deleteReport(id)          -> Promise<void>        (own report, or moderator)
+//   setReportStatus(id, s)    -> Promise<Report>      (moderator only)
 //   getNews()                 -> Promise<NewsItem[]>
 //   getEvents()               -> Promise<EventItem[]>
 //   uploadReportPhoto(file)   -> Promise<string>   (a photo URL)
@@ -35,7 +38,9 @@
 //     photoUrl:     'https://...',                  // '' if the user added no photo
 //     status:       'Unverified',                   // Unverified|In Progress|Resolved|Verified
 //     reportedBy:   'Sai Teja',
-//     reportedAt:   '2026-09-12T10:30:00+05:30'     // ISO date-time TEXT (not a Timestamp)
+//     reportedAt:   '2026-09-12T10:30:00+05:30',    // ISO date-time TEXT (not a Timestamp)
+//     ownerUid:     'abc123...',                    // who posted it ('' for the seeded demo rows)
+//     updatedAt:    ''                              // when it was last edited, '' if never
 //   }
 //
 // ===========================================================================
@@ -47,11 +52,14 @@ import {
   getDocs,
   addDoc,
   setDoc,
+  updateDoc,
+  deleteDoc,
   query,
   orderBy,
 } from 'firebase/firestore'
 
 import { db, isFirebaseConfigured } from './firebase.js'
+import { ensureSignedIn, getCurrentUid, isCurrentUserAdmin } from './auth.js'
 import { sampleEvents, sampleNews, sampleReports } from '../data/sampleData.js'
 import { readStore, writeStore } from './storage.js'
 import { uploadPhoto } from './photoUpload.js'
@@ -132,6 +140,8 @@ function toReport(snapshot) {
     status: data.status || DEFAULT_STATUS,
     reportedBy: data.reportedBy || 'Anonymous',
     reportedAt: toIsoString(data.reportedAt),
+    ownerUid: data.ownerUid || '',
+    updatedAt: toIsoString(data.updatedAt),
   }
 }
 
@@ -209,6 +219,8 @@ export async function createReport(input) {
       status: DEFAULT_STATUS,
       reportedBy: input.reportedBy || 'Anonymous',
       reportedAt: new Date().toISOString(),
+      ownerUid: DEMO_OWNER_UID,
+      updatedAt: '',
     }
 
     const saved = readStore(REPORTS_KEY, [])
@@ -219,6 +231,13 @@ export async function createReport(input) {
   // -------------------------------------------------------------------------
   // FIREBASE MODE
   // -------------------------------------------------------------------------
+
+  // 0. Give this browser an identity (silently - no login screen). We store
+  //    the uid on the report so the rules can later tell "the person who
+  //    posted this" apart from everybody else.
+  const user = await ensureSignedIn()
+  const ownerUid = user?.uid || ''
+  const reportedAt = new Date().toISOString()
 
   // 1. Save the report itself.
   //    reportedAt is saved as TEXT, not serverTimestamp(), on purpose:
@@ -235,7 +254,8 @@ export async function createReport(input) {
     photoUrl: '',
     status: DEFAULT_STATUS,
     reportedBy: input.reportedBy || 'Anonymous',
-    reportedAt: new Date().toISOString(),
+    reportedAt,
+    ownerUid,
   })
 
   // 2. Save the photo separately, under the same document id.
@@ -268,7 +288,183 @@ export async function createReport(input) {
     photoUrl,
     status: DEFAULT_STATUS,
     reportedBy: input.reportedBy || 'Anonymous',
-    reportedAt: new Date().toISOString(),
+    reportedAt,
+    ownerUid,
+    updatedAt: '',
+  }
+}
+
+// ===========================================================================
+// EDITING, DELETING AND MODERATING
+// ===========================================================================
+//
+// WHO IS ALLOWED TO DO WHAT is decided by the Firestore security rules, not
+// by this file. The functions below simply try; if the rules say no, Firebase
+// throws "Missing or insufficient permissions" and we turn that into a
+// friendly sentence. The buttons in the UI are hidden from people who cannot
+// use them, but the real protection lives in the rules.
+//
+//   you posted it      -> update, delete
+//   you are the admin  -> update, delete, change status
+//   everyone else      -> read only
+// ===========================================================================
+
+/** In demo mode there is no Firebase, so locally-created reports belong to us. */
+const DEMO_OWNER_UID = 'demo-owner'
+
+/** Did the person at this browser post this report? */
+export function isReportOwner(report) {
+  if (!report) return false
+  if (!isFirebaseConfigured || !db) return report.ownerUid === DEMO_OWNER_UID
+  const uid = getCurrentUid()
+  return Boolean(uid) && report.ownerUid === uid
+}
+
+/** Is the person at this browser the moderator? */
+export function canModerate() {
+  if (!isFirebaseConfigured || !db) return false // demo mode has no accounts
+  return isCurrentUserAdmin()
+}
+
+/** May this browser edit or delete this report at all? */
+export function canEditReport(report) {
+  return isReportOwner(report) || canModerate()
+}
+
+/**
+ * Turn a raw Firebase error into a sentence worth showing a person.
+ */
+function explainWriteError(error) {
+  const code = error?.code || ''
+  if (code === 'permission-denied' || String(error?.message).includes('PERMISSION_DENIED')) {
+    return new Error(
+      'You are not allowed to change this report. You can only edit or delete a report you posted yourself.',
+    )
+  }
+  if (code === 'unavailable') {
+    return new Error('You appear to be offline. Check your internet connection and try again.')
+  }
+  return new Error(error?.message || 'Could not save the change. Please try again.')
+}
+
+/**
+ * updateReport(id, input) -> Promise<Report>
+ *
+ * Changes the words and the photo of a report. It deliberately does NOT
+ * change:
+ *   * status   - that is the moderator's job
+ *   * ownerUid - so nobody can claim someone else's report
+ *   * reportedAt - so the "reported" date stays the truth about when it
+ *     first arrived. The edit time goes into `updatedAt` instead.
+ */
+export async function updateReport(id, input = {}) {
+  const changes = {
+    title: (input.title || 'Untitled report').trim(),
+    type: input.type || 'Other',
+    description: (input.description || '').trim(),
+    locationName: input.locationName || 'Location selected on map',
+    updatedAt: new Date().toISOString(),
+  }
+
+  // Only move the pin if the caller actually sent a new position.
+  if (typeof input.lat === 'number' && typeof input.lng === 'number') {
+    changes.lat = Number(input.lat)
+    changes.lng = Number(input.lng)
+  }
+
+  // -------------------------------------------------------------------------
+  // DEMO MODE
+  // -------------------------------------------------------------------------
+  if (!isFirebaseConfigured || !db) {
+    await fakeNetworkDelay(300)
+    const saved = readStore(REPORTS_KEY, [])
+    let updated = null
+
+    const next = saved.map((report) => {
+      if (report.id !== id) return report
+      updated = { ...report, ...changes }
+      return updated
+    })
+
+    if (!updated) throw new Error('That report is not stored in this browser, so it cannot be edited.')
+    writeStore(REPORTS_KEY, next)
+    return updated
+  }
+
+  // -------------------------------------------------------------------------
+  // FIREBASE MODE
+  // -------------------------------------------------------------------------
+  try {
+    await updateDoc(doc(db, 'reports', id), changes)
+  } catch (error) {
+    throw explainWriteError(error)
+  }
+
+  return getReportById(id)
+}
+
+/**
+ * setReportStatus(id, status) -> Promise<Report>
+ *
+ * Moderator only. This is the function behind the status dropdown on the
+ * report details page.
+ */
+export async function setReportStatus(id, status) {
+  if (!status) throw new Error('Pick a status first.')
+
+  if (!isFirebaseConfigured || !db) {
+    await fakeNetworkDelay(200)
+    const saved = readStore(REPORTS_KEY, [])
+    let updated = null
+    const next = saved.map((report) => {
+      if (report.id !== id) return report
+      updated = { ...report, status }
+      return updated
+    })
+    if (!updated) throw new Error('That report is not stored in this browser.')
+    writeStore(REPORTS_KEY, next)
+    return updated
+  }
+
+  try {
+    await updateDoc(doc(db, 'reports', id), { status })
+  } catch (error) {
+    throw explainWriteError(error)
+  }
+
+  return getReportById(id)
+}
+
+/**
+ * deleteReport(id) -> Promise<void>
+ *
+ * Removes the report and its photo. Allowed for the person who posted it,
+ * and for the moderator.
+ */
+export async function deleteReport(id) {
+  if (!isFirebaseConfigured || !db) {
+    await fakeNetworkDelay(300)
+    const saved = readStore(REPORTS_KEY, [])
+    writeStore(
+      REPORTS_KEY,
+      saved.filter((report) => report.id !== id),
+    )
+    return
+  }
+
+  try {
+    // The PHOTO goes first, on purpose. The security rule for deleting a
+    // photo looks up the report to check that you own it - so the report
+    // must still exist at that moment.
+    try {
+      await deleteDoc(doc(db, 'reportPhotos', id))
+    } catch {
+      /* no photo on this report, or the rules refused - carry on */
+    }
+
+    await deleteDoc(doc(db, 'reports', id))
+  } catch (error) {
+    throw explainWriteError(error)
   }
 }
 

@@ -5,9 +5,14 @@ import { TYPE_ICONS } from '../utils/constants.js'
 
 // ---------------------------------------------------------------------------
 // ReportCard  --  one report shown as a card in a list.
-// Props: report (object), onSelect (optional function, used on the Map page)
+// Props:
+//   report (object)
+//   onSelect (optional function, used on the Map page)
+//   compact (boolean)
+//   distanceLabel (optional string, e.g. "3.4 km") - shown when the user has
+//   shared their location and asked for "nearest first"
 // ---------------------------------------------------------------------------
-export default function ReportCard({ report, onSelect, compact = false }) {
+export default function ReportCard({ report, onSelect, compact = false, distanceLabel = '' }) {
   const content = (
     <>
       {report.photoUrl ? (
@@ -32,6 +37,7 @@ export default function ReportCard({ report, onSelect, compact = false }) {
         ) : null}
 
         <ul className="report-card__meta">
+          {distanceLabel ? <li className="report-card__distance">🧭 {distanceLabel} away</li> : null}
           <li>📍 {report.locationName || 'Location on map'}</li>
           <li>🕒 {formatDateTime(report.reportedAt)}</li>
           {report.reportedBy ? <li>👤 {report.reportedBy}</li> : null}

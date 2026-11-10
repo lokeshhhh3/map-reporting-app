@@ -21,15 +21,22 @@ export default function ReportForm({
   submitting = false,
   location = null,
   onClearLocation,
+  onUseMyLocation,
+  locating = false,
+  locationNote = '',
   errorMessage = '',
   submitLabel = 'Submit Report',
+  initialValues = null,
 }) {
+  // `initialValues` lets the SAME form be reused for editing an existing
+  // report: the details page passes the report's current text and we start
+  // with those boxes filled in instead of empty.
   const [values, setValues] = useState({
-    title: '',
-    type: 'Complaint',
-    description: '',
-    locationName: '',
-    reportedBy: '',
+    title: initialValues?.title || '',
+    type: initialValues?.type || 'Complaint',
+    description: initialValues?.description || '',
+    locationName: initialValues?.locationName || '',
+    reportedBy: initialValues?.reportedBy || '',
   })
   const [photoFile, setPhotoFile] = useState(null)
   const [photoPreview, setPhotoPreview] = useState('')
@@ -153,7 +160,7 @@ export default function ReportForm({
         </div>
       </div>
 
-      {/* 5. Location -- comes from the map */}
+      {/* 5. Location -- comes from the map, or from the browser's own GPS */}
       <div className="field" ref={mapSectionRef}>
         <label>Location</label>
         <div className={`location-box ${location ? 'is-set' : ''}`}>
@@ -168,8 +175,26 @@ export default function ReportForm({
               </button>
             </>
           ) : (
-            <p className="location-box__empty">👈 Click a point on the map to set the exact location.</p>
+            <p className="location-box__empty">
+              👈 Click a point on the map to set the exact location
+              {onUseMyLocation ? ' — or use your current position:' : '.'}
+            </p>
           )}
+
+          {/* The GPS button. It only appears if the page gave us a handler,
+              so this form still works without it. */}
+          {onUseMyLocation ? (
+            <button
+              type="button"
+              className="btn btn--outline btn--small geo-button"
+              onClick={onUseMyLocation}
+              disabled={locating}
+            >
+              {locating ? '📍 Finding you…' : '📍 Use my current location'}
+            </button>
+          ) : null}
+
+          {locationNote ? <p className="geo-note">{locationNote}</p> : null}
         </div>
         {errors.location ? <span className="field__error">{errors.location}</span> : null}
       </div>

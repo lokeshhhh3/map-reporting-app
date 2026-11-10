@@ -6,6 +6,7 @@ import ReportFilters from '../components/ReportFilters.jsx'
 import Loader from '../components/Loader.jsx'
 import EmptyState from '../components/EmptyState.jsx'
 import useReports from '../hooks/useReports.js'
+import { isWithinDateRange } from '../utils/mapMath.js'
 
 // ---------------------------------------------------------------------------
 // REPORTS PAGE  (Step 3 of the plan)
@@ -18,6 +19,7 @@ export default function Reports() {
   const [search, setSearch] = useState('')
   const [type, setType] = useState('All')
   const [status, setStatus] = useState('All')
+  const [dateRange, setDateRange] = useState('all')
   const [sort, setSort] = useState('newest')
 
   const visibleReports = useMemo(() => {
@@ -30,14 +32,21 @@ export default function Reports() {
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(text))
 
-      return matchesText && (type === 'All' || report.type === type) && (status === 'All' || report.status === status)
+      const matchesDate = isWithinDateRange(report.reportedAt, dateRange)
+
+      return (
+        matchesText &&
+        (type === 'All' || report.type === type) &&
+        (status === 'All' || report.status === status) &&
+        matchesDate
+      )
     })
 
     const sorted = [...filtered]
     if (sort === 'oldest') sorted.sort((a, b) => new Date(a.reportedAt) - new Date(b.reportedAt))
     if (sort === 'title') sorted.sort((a, b) => a.title.localeCompare(b.title))
     return sorted
-  }, [reports, search, type, status, sort])
+  }, [reports, search, type, status, dateRange, sort])
 
   const counts = useMemo(
     () => ({
@@ -88,11 +97,14 @@ export default function Reports() {
         onTypeChange={setType}
         status={status === 'Open' ? 'All' : status}
         onStatusChange={setStatus}
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
         resultCount={visibleReports.length}
         onReset={() => {
           setSearch('')
           setType('All')
           setStatus('All')
+          setDateRange('all')
           setSort('newest')
         }}
       />

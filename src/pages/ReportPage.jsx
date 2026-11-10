@@ -6,6 +6,7 @@ import ReportForm from '../components/ReportForm.jsx'
 import { StatusBadge, TypeBadge } from '../components/Badge.jsx'
 import useReports from '../hooks/useReports.js'
 import { formatLatLng } from '../utils/mapMath.js'
+import { getBrowserLocation, formatDistance } from '../utils/geo.js'
 
 // ---------------------------------------------------------------------------
 // REPORT PAGE  (Step 3 of the plan - "Report Form" page)
@@ -27,11 +28,41 @@ export default function ReportPage() {
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [lastSubmitted, setLastSubmitted] = useState(null)
+  const [locating, setLocating] = useState(false)
+  const [locationNote, setLocationNote] = useState('')
 
   /** The map calls this with (lat, lng) — this is the Maps Team contract. */
   function handleMapClick(lat, lng) {
     setSelectedLocation({ lat, lng })
+    setLocationNote('') // the user placed this by hand, so drop the GPS note
     setErrorMessage('')
+  }
+
+  /**
+   * "📍 Use my current location" on the form calls this.
+   *
+   * The browser asks the user for permission, then hands back coordinates.
+   * Those go into exactly the same selectedLocation state the map fills in,
+   * so nothing downstream needs to know where the pin came from.
+   */
+  async function handleUseMyLocation() {
+    setLocating(true)
+    setErrorMessage('')
+    setLocationNote('')
+
+    try {
+      const position = await getBrowserLocation()
+      setSelectedLocation({ lat: position.lat, lng: position.lng })
+      setLocationNote(
+        position.accuracy
+          ? `📍 Found you — accurate to about ${formatDistance(position.accuracy / 1000)}. Drag the map if the pin looks wrong.`
+          : '📍 Found you. Drag the map if the pin looks wrong.',
+      )
+    } catch (error) {
+      setErrorMessage(error?.message || 'Could not get your location.')
+    } finally {
+      setLocating(false)
+    }
   }
 
   /** The form calls this with all the field values. */
@@ -100,7 +131,13 @@ export default function ReportPage() {
               onSubmit={handleSubmit}
               submitting={submitting}
               location={selectedLocation}
-              onClearLocation={() => setSelectedLocation(null)}
+              onClearLocation={() => {
+                setSelectedLocation(null)
+                setLocationNote('')
+              }}
+              onUseMyLocation={handleUseMyLocation}
+              locating={locating}
+              locationNote={locationNote}
               errorMessage={errorMessage}
             />
           </div>

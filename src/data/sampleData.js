@@ -7,6 +7,37 @@
 // src/services/api.js  ->  which the Backend Team fills with Firebase code.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// DATES ARE RELATIVE TO TODAY, ON PURPOSE.
+//
+// If these were fixed dates like "12 Sept 2026", the demo data would look
+// stale a month later - and the "Last 7 days" filter would show nothing,
+// which looks like a bug. Building them from the current date means the
+// demo is always fresh, whenever you run it.
+//
+// India Standard Time is UTC+05:30 all year (no daylight saving), so we can
+// add that offset and then use the UTC getters to read IST calendar dates.
+// ---------------------------------------------------------------------------
+
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+
+/** The IST calendar date `offsetDays` away from today (negative = past). */
+function istDate(offsetDays) {
+  const date = new Date(Date.now() + IST_OFFSET_MS)
+  date.setUTCDate(date.getUTCDate() + offsetDays)
+  return date
+}
+
+/** "YYYY-MM-DD" - used by news and events. */
+function dayOffset(offsetDays) {
+  return istDate(offsetDays).toISOString().slice(0, 10)
+}
+
+/** "2026-09-27T10:30:00+05:30" - used by reports, which need a time too. */
+function timestampOffset(offsetDays, time = '10:30') {
+  return `${dayOffset(offsetDays)}T${time}:00+05:30`
+}
+
 export const sampleReports = [
   {
     id: 'r-1001',
@@ -20,7 +51,7 @@ export const sampleReports = [
     photoUrl: '',
     status: 'Unverified',
     reportedBy: 'Sai Teja',
-    reportedAt: '2026-09-12T10:30:00+05:30',
+    reportedAt: timestampOffset(0, '10:30'),
   },
   {
     id: 'r-1002',
@@ -34,7 +65,7 @@ export const sampleReports = [
     photoUrl: '',
     status: 'In Progress',
     reportedBy: 'Anitha R',
-    reportedAt: '2026-09-11T08:05:00+05:30',
+    reportedAt: timestampOffset(-1, '08:05'),
   },
   {
     id: 'r-1003',
@@ -48,7 +79,7 @@ export const sampleReports = [
     photoUrl: '',
     status: 'Resolved',
     reportedBy: 'Anonymous',
-    reportedAt: '2026-09-10T09:15:00+05:30',
+    reportedAt: timestampOffset(-2, '09:15'),
   },
   {
     id: 'r-1004',
@@ -62,7 +93,7 @@ export const sampleReports = [
     photoUrl: '',
     status: 'Verified',
     reportedBy: 'NSS Coordinator',
-    reportedAt: '2026-09-09T17:40:00+05:30',
+    reportedAt: timestampOffset(-3, '17:40'),
   },
   {
     id: 'r-1005',
@@ -76,7 +107,7 @@ export const sampleReports = [
     photoUrl: '',
     status: 'Verified',
     reportedBy: 'Hostel Warden',
-    reportedAt: '2026-09-08T19:10:00+05:30',
+    reportedAt: timestampOffset(-5, '19:10'),
   },
   {
     id: 'r-1006',
@@ -90,7 +121,7 @@ export const sampleReports = [
     photoUrl: '',
     status: 'Unverified',
     reportedBy: 'Rahul K',
-    reportedAt: '2026-09-07T18:20:00+05:30',
+    reportedAt: timestampOffset(-8, '18:20'),
   },
   {
     id: 'r-1007',
@@ -104,7 +135,7 @@ export const sampleReports = [
     photoUrl: '',
     status: 'In Progress',
     reportedBy: 'Anonymous',
-    reportedAt: '2026-09-06T07:45:00+05:30',
+    reportedAt: timestampOffset(-15, '07:45'),
   },
   {
     id: 'r-1008',
@@ -118,7 +149,7 @@ export const sampleReports = [
     photoUrl: '',
     status: 'Resolved',
     reportedBy: 'Fatima S',
-    reportedAt: '2026-09-05T20:15:00+05:30',
+    reportedAt: timestampOffset(-25, '20:15'),
   },
 ]
 
@@ -128,7 +159,7 @@ export const sampleNews = [
     title: 'Semester Exams Timetable Released',
     description:
       'The examination branch published the final timetable for all branches. Check the notice board or the college portal for the PDF.',
-    date: '2026-09-13',
+    date: dayOffset(0),
     category: 'Academics',
     author: 'Examination Branch',
   },
@@ -137,7 +168,7 @@ export const sampleNews = [
     title: 'Campus Wi-Fi Upgrade This Weekend',
     description:
       'New access points are being installed in the library and Block C. Expect short network interruptions on Saturday.',
-    date: '2026-09-12',
+    date: dayOffset(-1),
     category: 'Campus',
     author: 'IT Support',
   },
@@ -146,7 +177,7 @@ export const sampleNews = [
     title: 'Placement Drive: 12 Companies Confirmed',
     description:
       'The training and placement cell confirmed 12 companies for the September drive. Registration closes on 20 September.',
-    date: '2026-09-10',
+    date: dayOffset(-2),
     category: 'Placements',
     author: 'TPO Office',
   },
@@ -155,7 +186,7 @@ export const sampleNews = [
     title: 'Library Extended Hours During Exams',
     description:
       'The central library will remain open till 11pm from Monday. Carry your ID card for entry after 8pm.',
-    date: '2026-09-08',
+    date: dayOffset(-4),
     category: 'Campus',
     author: 'Chief Librarian',
   },
@@ -164,7 +195,7 @@ export const sampleNews = [
     title: 'Road Repair Work Approved Near Main Gate',
     description:
       'The municipal corporation approved the repair of the road outside the main gate after repeated student complaints.',
-    date: '2026-09-06',
+    date: dayOffset(-6),
     category: 'Civic',
     author: 'Student Council',
   },
@@ -175,7 +206,7 @@ export const sampleEvents = [
     id: 'e-01',
     name: 'TechFest 2026 - Project Expo',
     location: 'College Auditorium',
-    date: '2026-09-27',
+    date: dayOffset(0),
     time: '10:00 AM',
     description:
       'Show your mini projects to judges from industry. Teams of up to 4 members. Prizes for the top three projects.',
@@ -186,7 +217,7 @@ export const sampleEvents = [
     id: 'e-02',
     name: 'Blood Donation Camp',
     location: 'NSS Room, Block B',
-    date: '2026-09-20',
+    date: dayOffset(5),
     time: '9:00 AM',
     description:
       'Organised by the NSS unit with the Red Cross Society. Donors must be above 18 and above 50 kg.',
@@ -197,7 +228,7 @@ export const sampleEvents = [
     id: 'e-03',
     name: 'Inter-College Cricket Tournament',
     location: 'College Ground',
-    date: '2026-10-04',
+    date: dayOffset(12),
     time: '7:30 AM',
     description:
       'Eight college teams are participating. Entry is free for students. Bring your ID card.',
@@ -208,7 +239,7 @@ export const sampleEvents = [
     id: 'e-04',
     name: 'Culture Night - Rhythm 2026',
     location: 'Open Air Theatre',
-    date: '2026-08-29',
+    date: dayOffset(-7),
     time: '6:00 PM',
     description:
       'Music, dance and drama performances by every department. Thanks to everyone who attended and made it a success.',
@@ -219,7 +250,7 @@ export const sampleEvents = [
     id: 'e-05',
     name: 'Clean Campus Drive',
     location: 'Main Campus',
-    date: '2026-08-22',
+    date: dayOffset(-20),
     time: '8:00 AM',
     description:
       'Volunteers collected 40 bags of plastic waste. The drive will be repeated every month.',

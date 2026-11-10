@@ -1,11 +1,23 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import Loader from '../components/Loader.jsx'
 import EmptyState from '../components/EmptyState.jsx'
 import MiniMap from '../components/MiniMap.jsx'
+import MapView from '../components/MapView.jsx'
 import ReportCard from '../components/ReportCard.jsx'
+import ReportForm from '../components/ReportForm.jsx'
 import { StatusBadge, TypeBadge } from '../components/Badge.jsx'
-import { getReportById, getReports } from '../services/api.js'
+import useAuth from '../hooks/useAuth.js'
+import {
+  canEditReport,
+  canModerate,
+  deleteReport,
+  getReportById,
+  getReports,
+  setReportStatus,
+  updateReport,
+} from '../services/api.js'
+import { REPORT_STATUSES } from '../utils/constants.js'
 import { formatDateTime, formatLatLng } from '../utils/mapMath.js'
 
 // ---------------------------------------------------------------------------
@@ -16,11 +28,25 @@ import { formatDateTime, formatLatLng } from '../utils/mapMath.js'
 // ---------------------------------------------------------------------------
 export default function ReportDetails() {
   const { id } = useParams()
+  const navigate = useNavigate()
+
+  // Re-renders this page once we know which browser identity we are, so the
+  // Edit / Delete buttons appear for the person who posted the report.
+  useAuth()
 
   const [report, setReport] = useState(null)
   const [nearby, setNearby] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  // --- editing ---
+  const [editing, setEditing] = useState(false)
+  const [editLocation, setEditLocation] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [actionError, setActionError] = useState('')
+
+  // --- moderator ---
+  const [moderating, setModerating] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -60,6 +86,64 @@ export default function ReportDetails() {
     }
   }, [id])
 
+  /** Open the edit form, starting it at the report's current pin. */
+  function startEditing() {
+    setEditLocation({ lat: report.lat, lng: report.lng })
+    setActionError('')
+    setEditing(true)
+  }
+
+  /** Save the edits through api.js. */
+  async function handleSaveEdits(values) {
+    try {
+      setSaving(true)
+      setActionError('')
+      const updated = await updateReport(report.id, {
+        ...values,
+        lat: editLocation?.lat ?? report.lat,
+        lng: editLocation?.lng ?? report.lng,
+      })
+      setReport(updated)
+      setEditing(false)
+    } catch (err) {
+      setActionError(err?.message || 'Could not save your changes.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** Delete, after asking. Deleting cannot be undone. */
+  async function handleDelete() {
+    const sure = window.confirm(
+      `Delete "${report.title}"?\n\nThis removes the report and its pin for everyone. It cannot be undone.`,
+    )
+    if (!sure) return
+
+    try {
+      setSaving(true)
+      setActionError('')
+      await deleteReport(report.id)
+      navigate('/reports')
+    } catch (err) {
+      setActionError(err?.message || 'Could not delete this report.')
+      setSaving(false)
+    }
+  }
+
+  /** Moderator: change the status. */
+  async function handleStatusChange(nextStatus) {
+    try {
+      setModerating(true)
+      setActionError('')
+      const updated = await setReportStatus(report.id, nextStatus)
+      setReport(updated)
+    } catch (err) {
+      setActionError(err?.message || 'Could not change the status.')
+    } finally {
+      setModerating(false)
+    }
+  }
+
   if (loading) {
     return (
       <section className="container page">
@@ -90,6 +174,12 @@ export default function ReportDetails() {
     )
   }
 
+  // Who may do what. The rules enforce this for real - these flags only
+  // decide which buttons to draw.
+  const iAmOwner = canEditReport(report)
+  const iAmModerator = canModerate()
+  const showEditControls = iAmOwner || iAmModerator
+
   return (
     <section className="container page">
       <nav className="breadcrumb" aria-label="Breadcrumb">
@@ -100,14 +190,110 @@ export default function ReportDetails() {
 
       <div className="details-layout">
         <article className="card details-main">
+          {editing ? (
+            /* ============ EDIT MODE ============ */
+            <div className="edit-panel">
+              <header className="details-main__head">
+                <div className="report-card__badges">
+                  <TypeBadge type={report.type} />
+                  <StatusBadge status={report.status} />
+                </div>
+                <h1>Edit this report</h1>
+                <p className="muted">
+                  Change the words below, and click the map if the pin is in the wrong place.
+                </p>
+              </header>
+
+              {actionError ? <p className="alert alert--error">{actionError}</p> : null}
+
+              <MapView
+                reports={[]}
+                selectedLocation={editLocation}
+                onMapClick={(lat, lng) => setEditLocation({ lat, lng })}
+                height="300px"
+                showLegend={false}
+              />
+
+              <ReportForm
+                onSubmit={handleSaveEdits}
+                submitting={saving}
+                location={editLocation}
+                onClearLocation={() => setEditLocation(null)}
+                initialValues={report}
+                submitLabel="Save changes"
+                errorMessage=""
+              />
+
+              <div className="edit-panel__cancel">
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => {
+                    setEditing(false)
+                    setActionError('')
+                  }}
+                  disabled={saving}
+                >
+                  Cancel
+                </button>
+                <p className="field__hint">
+                  The status and the original report date are not changed by an edit.
+                </p>
+              </div>
+            </div>
+          ) : (
+          <>
           <header className="details-main__head">
             <div className="report-card__badges">
               <TypeBadge type={report.type} />
               <StatusBadge status={report.status} />
             </div>
             <h1>{report.title}</h1>
-            <p className="muted">Reported {formatDateTime(report.reportedAt)}</p>
+            <p className="muted">
+              Reported {formatDateTime(report.reportedAt)}
+              {report.updatedAt ? ` · edited ${formatDateTime(report.updatedAt)}` : ''}
+            </p>
           </header>
+
+          {actionError ? <p className="alert alert--error">{actionError}</p> : null}
+
+          {/* ---------- You are the moderator: change the status ---------- */}
+          {iAmModerator ? (
+            <div className="moderator-bar">
+              <span className="moderator-bar__label">🛡️ Moderator</span>
+              <label htmlFor="moderate-status" className="sr-only">
+                Change status
+              </label>
+              <select
+                id="moderate-status"
+                value={report.status}
+                onChange={(event) => handleStatusChange(event.target.value)}
+                disabled={moderating}
+              >
+                {REPORT_STATUSES.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="btn btn--danger btn--small" onClick={handleDelete} disabled={saving}>
+                Delete report
+              </button>
+            </div>
+          ) : null}
+
+          {/* ---------- You posted this report: edit it ---------- */}
+          {!iAmModerator && iAmOwner ? (
+            <div className="owner-bar">
+              <span className="owner-bar__label">✍️ You posted this report</span>
+              <button type="button" className="btn btn--outline btn--small" onClick={startEditing} disabled={editing}>
+                Edit report
+              </button>
+              <button type="button" className="btn btn--danger btn--small" onClick={handleDelete} disabled={saving}>
+                Delete
+              </button>
+            </div>
+          ) : null}
 
           {report.photoUrl ? (
             <img className="details-main__photo" src={report.photoUrl} alt={`Photo for ${report.title}`} />
@@ -163,6 +349,9 @@ export default function ReportDetails() {
               </div>
             </dl>
           </section>
+
+          </>
+          )}
 
           <footer className="details-main__actions">
             <Link to="/map" className="btn btn--primary">

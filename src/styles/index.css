@@ -206,6 +206,84 @@ code {
   background: var(--slate-200);
 }
 
+/* Deleting something is serious, so it looks serious. */
+.btn--danger {
+  background: var(--red-600);
+  color: #fff;
+}
+
+.btn--danger:hover {
+  background: #b91c1c;
+}
+
+.btn--danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Visible to screen readers only - used for labels that would look cluttered */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Edit / delete bar: "you posted this report" --- */
+
+.owner-bar,
+.moderator-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 18px;
+}
+
+.owner-bar {
+  background: var(--blue-100, #e0edff);
+  border: 1px solid var(--blue-600, #2563eb);
+}
+
+.moderator-bar {
+  background: var(--amber-100, #fef3c7);
+  border: 1px solid var(--amber-600, #d97706);
+}
+
+.owner-bar__label,
+.moderator-bar__label {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-right: auto;
+}
+
+.moderator-bar select {
+  width: auto;
+  min-width: 150px;
+}
+
+.edit-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.edit-panel__cancel {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--slate-200);
+  padding-top: 14px;
+}
+
 .btn--large {
   padding: 14px 26px;
   font-size: 1.05rem;
@@ -1727,6 +1805,23 @@ code {
   margin: 0;
   font-size: 0.9rem;
   color: var(--slate-500);
+}
+
+/* --- "Use my current location" (browser GPS) --- */
+
+.geo-button {
+  margin-top: 12px;
+}
+
+.geo-button:disabled {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+.geo-note {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  color: var(--green-700, var(--green-600));
 }
 
 .report-form__actions {

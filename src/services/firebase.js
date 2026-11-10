@@ -40,18 +40,21 @@ const firebaseConfig = {
 export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId)
 
 let db = null
+let app = null
 
 if (isFirebaseConfigured) {
   try {
-    const app = initializeApp(firebaseConfig)
+    app = initializeApp(firebaseConfig)
     db = getFirestore(app)
     console.info('🔥 Firebase connected to project:', firebaseConfig.projectId)
   } catch (error) {
     console.warn('🔥 Firebase could not start. Falling back to demo data.', error?.message)
     db = null
+    app = null
   }
 } else {
   console.info('🔥 No Firebase settings found (.env missing). Using demo data — this is fine.')
 }
 
-export { db }
+// `app` is shared with services/auth.js so both use the same Firebase app.
+export { db, app }

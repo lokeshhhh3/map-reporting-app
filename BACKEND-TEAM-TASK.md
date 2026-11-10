@@ -65,6 +65,21 @@ Steps 1–4 are on **console.firebase.google.com**. Steps 5–7 are in **VS Code
 
 That's correct — the collections are empty because you fill them in Step 7.
 
+## Step 2b — Turn on anonymous sign-in
+
+This is what lets the app know "this is the browser that posted that report", so you can edit your own reports and moderate everyone's. **There is no login screen and no password** — nobody types anything.
+
+1. Firebase console → **Build → Authentication** → **Get started**
+2. Click the **Sign-in method** tab
+3. Click **Anonymous** in the list
+4. Toggle **Enable** on → **Save**
+
+That's it. Free, unlimited, and it does not affect how people use the app.
+
+> If you skip this step the app still works perfectly — it simply cannot tell who posted what, so the Edit buttons never appear.
+
+---
+
 ## Step 3 — Paste the security rules
 
 1. On the Firestore page, click the **Rules** tab (top, next to Data / Indexes / Rules)
@@ -76,22 +91,46 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ------------------------------ REPORTS ------------------------------
     match /reports/{reportId} {
+
+      // Anyone can look at the map.
       allow read: if true;
+
+      // Anyone can post a report, but it must have a real title and
+      // numeric coordinates...
       allow create: if request.resource.data.title is string
                     && request.resource.data.title.size() > 0
                     && request.resource.data.title.size() <= 120
                     && request.resource.data.lat is number
-                    && request.resource.data.lng is number;
-      allow update, delete: if false;
+                    && request.resource.data.lng is number
+                    // ...and if this browser has an identity, it must claim
+                    // the report as its own - so nobody can post AS someone
+                    // else and then "own" their report.
+                    && (request.auth == null
+                        || request.resource.data.ownerUid == request.auth.uid);
+
+      // Editing or deleting: the browser that posted it, or the moderator.
+      // Replace the id below with YOUR id to become the moderator.
+      allow update, delete: if request.auth != null
+                    && (resource.data.get('ownerUid', '') == request.auth.uid
+                        || request.auth.uid == "PASTE_YOUR_ADMIN_UID_HERE");
     }
 
+    // ------------------------------ PHOTOS -------------------------------
     match /reportPhotos/{photoId} {
       allow read: if true;
       allow create: if request.resource.data.dataUrl is string;
-      allow update, delete: if false;
+
+      // Only the owner of the report the photo belongs to, or the moderator.
+      allow delete: if request.auth != null
+                    && (request.auth.uid == "PASTE_YOUR_ADMIN_UID_HERE"
+                        || get(/databases/$(database)/documents/reports/$(photoId)).data.get('ownerUid', '') == request.auth.uid);
+
+      allow update: if false;
     }
 
+    // --------------------- NEWS AND EVENTS (you only) --------------------
     match /news/{id} {
       allow read: if true;
       allow write: if false;
@@ -104,6 +143,10 @@ service cloud.firestore {
   }
 }
 ```
+
+**What changed from the first version:** reports used to be `allow update, delete: if false` (nobody, ever). Now the browser that posted a report can edit or delete its own, and the moderator id you paste in can edit or delete any. Everything else is identical.
+
+> ⚠️ Leave `PASTE_YOUR_ADMIN_UID_HERE` as it is if you have not set up moderation yet - it simply matches nobody, and the rest of the app works normally.
 
 4. Click **Publish**
 
@@ -256,6 +299,71 @@ If instead you see `No Firebase settings found (.env missing)`, your `.env` file
 
 ---
 
+## Step 9 — Becoming the moderator
+
+Right now anyone can post a report, but **only you** should be able to mark one "Resolved" or delete it. Here is how you claim that power.
+
+Everything below is optional. Skip it and the app works exactly as before — you just moderate from the Firebase console instead of from the website.
+
+### 9.1 Get your browser's id
+
+1. Make sure **Step 2b** is done (anonymous sign-in enabled)
+2. Open the website — `npm run dev` → the link it prints
+3. Press **F12** → **Console** tab
+4. Find this line and copy the whole id after the colon:
+   ```
+   🔥 Signed in anonymously. Your uid is: kR3nQ8xT2pVdA1bC4eF6gH7jK9mN
+   ```
+5. Restart the dev server first (Ctrl+C, then `npm run dev`) if you do not see the line at all
+
+### 9.2 Put it in `.env`
+
+Open `.env` and paste your id after the `=`:
+
+```
+VITE_ADMIN_UID=kR3nQ8xT2pVdA1bC4eF6gH7jK9mN
+```
+
+Save, then **restart** the dev server (Ctrl+C, then `npm run dev`). Vite only reads `.env` at startup.
+
+### 9.3 Put it in the security rules
+
+Go to **Firestore Database → Rules** and replace **both** places where it says:
+
+```
+"PASTE_YOUR_ADMIN_UID_HERE"
+```
+
+...with your id, inside the quotes. There are two, one for reports and one for photos.
+
+Click **Publish**.
+
+> ⚠️ Without this step the app will *show* you the moderator buttons but the database will refuse the change — you'd see "You are not allowed to change this report."
+
+### 9.4 For the live website too
+
+Repo → **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Name | Value |
+|---|---|
+| `VITE_ADMIN_UID` | your id |
+
+Then **Actions → Deploy → Re-run all jobs**.
+
+### 9.5 Check it works
+
+Open any report — including ones you did not post. You should see a yellow bar:
+
+```
+🛡️ Moderator   [ status dropdown ]   [ Delete report ]
+```
+
+Change a status, refresh, and confirm it stuck. Then check the same page in a private/incognito window: the bar should be **gone**, because that is a different browser with a different id.
+
+**If someone clears their browser data**, they lose the ability to edit their old reports — the report survives, but the ownership link is gone. That is the trade-off of having no login, and for a campus map it is the right one.
+
+---
+
 ## Putting the config on the live website
 
 Your GitHub Pages site will keep working on demo data until you do this. To make the live site use your real database:
@@ -325,6 +433,10 @@ The app shrinks every photo to a maximum of 900px wide before saving — roughly
 | Pins in the wrong place | `lat`/`lng` saved as text not numbers | In the console, check one document: they must be numbers, not `"17.38"` |
 | "Failed to resolve import firebase/app" | Library not installed | `npm install firebase` |
 | Worked, then broke after editing code | Something in `api.js` | `git checkout src/services/api.js` to restore the working version |
+| No **Edit** button on my own report | Anonymous sign-in is off, or the report was posted before you turned it on | Do Step 2b, then post a fresh report to test |
+| "You are not allowed to change this report" | Your id is in `.env` but not in the rules | Step 9.3 |
+| Moderator bar missing on the live site | The `VITE_ADMIN_UID` secret is missing | Step 9.4 |
+| Console shows `Could not sign in anonymously` | Anonymous sign-in is not enabled | Step 2b |
 
 **Reading errors:** open the browser console with **F12**, and read from the **bottom up**. Fix only the first error.
 
