@@ -56,6 +56,7 @@ import {
   deleteDoc,
   query,
   orderBy,
+  arrayUnion,
 } from 'firebase/firestore'
 
 import { db, isFirebaseConfigured } from './firebase.js'
@@ -138,6 +139,7 @@ function toReport(snapshot) {
     locationName: data.locationName || 'Location selected on map',
     photoUrl: data.photoUrl || '',
     status: data.status || DEFAULT_STATUS,
+    statusHistory: Array.isArray(data.statusHistory) ? data.statusHistory : [],
     reportedBy: data.reportedBy || 'Anonymous',
     reportedAt: toIsoString(data.reportedAt),
     ownerUid: data.ownerUid || '',
@@ -217,6 +219,11 @@ export async function createReport(input) {
       locationName: input.locationName || 'Location selected on map',
       photoUrl,
       status: DEFAULT_STATUS,
+      statusHistory: [{
+  status: DEFAULT_STATUS,
+  at: reportedAt,
+  note: 'Report submitted',
+}],
       reportedBy: input.reportedBy || 'Anonymous',
       reportedAt: new Date().toISOString(),
       ownerUid: DEMO_OWNER_UID,
