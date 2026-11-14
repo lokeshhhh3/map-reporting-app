@@ -754,6 +754,30 @@ code {
   .stat-strip .stat-strip__skeleton { animation: none; }
 }
 
+/* Home: a concise invitation to the route planner. */
+.home-route {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 24px;
+  background: var(--blue-100);
+  border: 1px solid #bfdbfe;
+  border-radius: var(--radius-lg);
+}
+
+.home-route__eyebrow {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--blue-700);
+}
+
+.home-route h2 { margin: 0 0 8px; }
+.home-route p:last-child { margin: 0; color: var(--slate-700); }
+
 /* Quick access tiles */
 .tile-grid {
   display: grid;

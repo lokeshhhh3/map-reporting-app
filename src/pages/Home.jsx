@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import MapView from '../components/MapView.jsx'
-import ReportCard from '../components/ReportCard.jsx'
 import NewsCard from '../components/NewsCard.jsx'
 import EventCard from '../components/EventCard.jsx'
 import Loader from '../components/Loader.jsx'
@@ -12,8 +11,7 @@ import { getEvents, getNews } from '../services/api.js'
 
 // ---------------------------------------------------------------------------
 // HOME PAGE  (Step 3 of the plan)
-// Quick access to Map / Reports / News / Events / Create Report, a map preview
-// with pins, the latest nearby reports, and the newest news + events.
+// An introduction, route planner callout, map preview, and community updates.
 // ---------------------------------------------------------------------------
 export default function Home() {
   const navigate = useNavigate()
@@ -45,9 +43,6 @@ export default function Home() {
               <Link to="/map" className="btn btn--primary btn--large">
                 Open the Map
               </Link>
-              <Link to="/report" className="btn btn--outline btn--large">
-                + Create Report
-              </Link>
             </div>
           </div>
 
@@ -73,36 +68,14 @@ export default function Home() {
       </section>
 
       <div className="container">
-        {/* ---------- quick access tiles ---------- */}
-        <section className="section">
-          <h2 className="section__title">Quick access</h2>
-          <div className="tile-grid">
-            <Link to="/map" className="tile">
-              <span className="tile__icon" aria-hidden="true">🗺️</span>
-              <h3>Map</h3>
-              <p>All the pins in your area on one screen.</p>
-            </Link>
-            <Link to="/reports" className="tile">
-              <span className="tile__icon" aria-hidden="true">📋</span>
-              <h3>Reports</h3>
-              <p>Search and filter every report.</p>
-            </Link>
-            <Link to="/news" className="tile">
-              <span className="tile__icon" aria-hidden="true">📰</span>
-              <h3>News</h3>
-              <p>College news and announcements.</p>
-            </Link>
-            <Link to="/events" className="tile">
-              <span className="tile__icon" aria-hidden="true">🎉</span>
-              <h3>Events</h3>
-              <p>Upcoming and past events.</p>
-            </Link>
-            <Link to="/report" className="tile tile--accent">
-              <span className="tile__icon" aria-hidden="true">➕</span>
-              <h3>Create Report</h3>
-              <p>Add a pin with a description and a photo.</p>
-            </Link>
+        {/* Show the route planner without repeating the navigation menu. */}
+        <section className="section home-route" aria-labelledby="home-route-title">
+          <div>
+            <p className="home-route__eyebrow">MORE THAN A MAP</p>
+            <h2 id="home-route-title">Find your way. Discover what’s along it.</h2>
+            <p>Plan a drive, walk or cycle, see directions and explore places near your route.</p>
           </div>
+          <Link to="/navigate" className="btn btn--primary btn--large">Plan a route →</Link>
         </section>
 
         {/* ---------- map + nearby ---------- */}
@@ -132,7 +105,7 @@ export default function Home() {
             <aside className="home__side card">
               <h3 className="card__title">Latest reports</h3>
               {loading ? <Loader /> : null}
-              {!loading && reports.length === 0 ? (
+              {!loading && !error && reports.length === 0 ? (
                 <EmptyState icon="📍" title="No reports yet" message="Be the first to report something." actionLabel="Create Report" actionTo="/report" />
               ) : null}
               <div className="home__side-list">
@@ -166,7 +139,7 @@ export default function Home() {
                 </Link>
               </div>
               <div className="stack">
-                {news.slice(0, 3).map((item) => (
+                {news.slice(0, 2).map((item) => (
                   <NewsCard key={item.id} item={item} />
                 ))}
               </div>
@@ -180,7 +153,7 @@ export default function Home() {
                 </Link>
               </div>
               <div className="stack">
-                {events.slice(0, 3).map((event) => (
+                {events.slice(0, 2).map((event) => (
                   <EventCard key={event.id} event={event} />
                 ))}
               </div>
@@ -188,37 +161,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ---------- how it works ---------- */}
-        <section className="section">
-          <h2 className="section__title">How it works</h2>
-          <ol className="steps">
-            <li>
-              <strong>Open the map</strong>
-              <span>See every pin that others have reported.</span>
-            </li>
-            <li>
-              <strong>Pick the exact spot</strong>
-              <span>Click the place on the map — that gives us latitude and longitude.</span>
-            </li>
-            <li>
-              <strong>Describe it and add a photo</strong>
-              <span>Complaint, incident, announcement, event or other.</span>
-            </li>
-            <li>
-              <strong>Submit</strong>
-              <span>The report is stored and instantly appears as a new pin.</span>
-            </li>
-          </ol>
-          <div className="cta-banner">
-            <div>
-              <h3>Spotted something in your area?</h3>
-              <p>It takes less than a minute to put it on the map.</p>
-            </div>
-            <Link to="/report" className="btn btn--primary btn--large">
-              + Create Report
-            </Link>
-          </div>
-        </section>
       </div>
     </div>
   )
