@@ -1,6 +1,8 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { REPORT_TYPES } from '../utils/constants.js'
 import { formatLatLng } from '../utils/mapMath.js'
+import { distanceKm } from '../utils/geo.js'
 
 // ---------------------------------------------------------------------------
 // ReportForm  --  Step 3/4 of the plan: the form users fill in.
@@ -27,6 +29,7 @@ export default function ReportForm({
   errorMessage = '',
   submitLabel = 'Submit Report',
   initialValues = null,
+  existingReports = [],
 }) {
   // `initialValues` lets the SAME form be reused for editing an existing
   // report: the details page passes the report's current text and we start
@@ -43,6 +46,27 @@ export default function ReportForm({
   const [errors, setErrors] = useState({})
 
   const photoInputRef = useRef(null)
+
+  // ---------------------------------------------------------------------------
+  // DUPLICATE WARNING
+  // If somebody has already reported the same KIND of problem at almost the
+  // same spot, we point it out. It is only a suggestion - the report is
+  // still sent, because sometimes two people really do see two problems.
+  // ---------------------------------------------------------------------------
+  const duplicates = useMemo(() => {
+    if (!location || !Array.isArray(existingReports)) return []
+
+    return existingReports
+      .filter((report) => report.id !== initialValues?.id)
+      .filter((report) => report.type === values.type)
+      .filter((report) => report.status !== 'Resolved')
+      .map((report) => ({
+        ...report,
+        distanceKm: distanceKm(location.lat, location.lng, report.lat, report.lng),
+      }))
+      .filter((report) => report.distanceKm <= 0.15)
+      .slice(0, 3)
+  }, [existingReports, location, values.type, initialValues])
   const mapSectionRef = useRef(null)
 
   function update(field, value) {
@@ -223,6 +247,29 @@ export default function ReportForm({
           />
         </div>
       </div>
+
+      {duplicates.length ? (
+        <div className="duplicate-warning">
+          <strong>⚠️ This may already have been reported</strong>
+          <p className="duplicate-warning__lead">
+            These are the same kind of {values.type.toLowerCase()} report within 150 m of your pin:
+          </p>
+          <ul>
+            {duplicates.map((report) => (
+              <li key={report.id}>
+                <Link to={`/reports/${report.id}`}>{report.title}</Link>
+                <small>
+                  {report.locationName || 'Unknown place'} ·{' '}
+                  {Math.round(report.distanceKm * 1000)} m away · {report.status}
+                </small>
+              </li>
+            ))}
+          </ul>
+          <p className="duplicate-warning__note">
+            You can still send your report - a moderator may merge them.
+          </p>
+        </div>
+      ) : null}
 
       <div className="report-form__actions">
         <button type="submit" className="btn btn--primary btn--large" disabled={submitting}>

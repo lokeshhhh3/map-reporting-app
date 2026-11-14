@@ -30,6 +30,7 @@ No setup needed — just open it in any browser, including on a phone. It rebuil
 
 - **Home page** — quick access to Map, Reports, News, Events and Create Report, with a live map preview and headline statistics.
 - **Map page** — every report as a pin at its exact latitude/longitude, with search, type and status filters, and an information panel that opens when a pin is clicked.
+- **Navigate** — search for a start and destination, choose driving, walking or cycling, and view community reports along the route.
 - **Create Report** — the location picker and the report form side by side. Clicking the map drops a pin and the coordinates flow straight into the form.
 - **Reports list** — searchable and filterable list of every report, sortable by date or title.
 - **Report details** — one report on its own page with a mini map, full description, status and metadata, plus other reports nearby.
@@ -163,6 +164,7 @@ map-reporting-app/
 |---|---|---|
 | `/` | Home | Hero, statistics, quick access, map preview, latest reports, news and events |
 | `/map` | Map | Filters, pins, and an information panel for the selected pin |
+| `/navigate` | Navigate | Route planning and community reports on the map |
 | `/reports` | Reports | Search, filter by type/status, sort by date or title |
 | `/reports/:id` | Report details | Mini map, description, status, metadata, nearby reports |
 | `/report` | Create Report | Location picker + form side by side |

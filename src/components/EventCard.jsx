@@ -1,8 +1,18 @@
+import { useState } from 'react'
 import { formatDate } from '../utils/mapMath.js'
+import { downloadEventIcs } from '../utils/calendar.js'
 
 // EventCard -- one event. "Past" events look slightly faded (see the CSS).
 export default function EventCard({ event }) {
   const isPast = String(event.status || '').toLowerCase() === 'past'
+  const [calendarNote, setCalendarNote] = useState('')
+
+  /** Save this event to the phone's own calendar. */
+  function handleAddToCalendar() {
+    const ok = downloadEventIcs(event)
+    setCalendarNote(ok ? 'Downloaded — open the file to save it.' : 'Could not make the file.')
+    setTimeout(() => setCalendarNote(''), 4000)
+  }
 
   return (
     <article className={`event-card ${isPast ? 'event-card--past' : ''}`}>
@@ -26,6 +36,15 @@ export default function EventCard({ event }) {
         </ul>
 
         <p className="event-card__text">{event.description}</p>
+
+        {!isPast ? (
+          <div className="event-card__calendar">
+            <button type="button" className="btn btn--outline btn--small" onClick={handleAddToCalendar}>
+              📅 Add to calendar
+            </button>
+            {calendarNote ? <small className="event-card__calendar-note">{calendarNote}</small> : null}
+          </div>
+        ) : null}
       </div>
     </article>
   )

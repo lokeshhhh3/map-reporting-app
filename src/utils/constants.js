@@ -25,6 +25,7 @@ export const DEFAULT_STATUS = 'Unverified'
 export const NAV_LINKS = [
   { to: '/', label: 'Home' },
   { to: '/map', label: 'Map' },
+  { to: '/navigate', label: 'Navigate' },
   { to: '/reports', label: 'Reports' },
   { to: '/news', label: 'News' },
   { to: '/events', label: 'Events' },

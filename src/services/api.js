@@ -56,7 +56,9 @@ import {
   deleteDoc,
   query,
   orderBy,
-  arrayUnion,
+  where,
+  increment,
+  runTransaction,
 } from 'firebase/firestore'
 
 import { db, isFirebaseConfigured } from './firebase.js'
@@ -69,6 +71,8 @@ import { DEFAULT_STATUS } from '../utils/constants.js'
 const REPORTS_KEY = 'mra.reports.local'
 const NEWS_KEY = 'mra.news.local'
 const EVENTS_KEY = 'mra.events.local'
+const CONFIRMATIONS_KEY = 'mra.confirmations.local'
+const FOLLOWING_KEY = 'mra.following.local'
 
 /** Pretend the network is slow so we can test our loading states. */
 const fakeNetworkDelay = (ms = 250) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -139,11 +143,22 @@ function toReport(snapshot) {
     locationName: data.locationName || 'Location selected on map',
     photoUrl: data.photoUrl || '',
     status: data.status || DEFAULT_STATUS,
+    // The timeline of what happened to this report. Older reports have none,
+    // so we always fall back to an empty list instead of undefined.
     statusHistory: Array.isArray(data.statusHistory) ? data.statusHistory : [],
     reportedBy: data.reportedBy || 'Anonymous',
     reportedAt: toIsoString(data.reportedAt),
     ownerUid: data.ownerUid || '',
     updatedAt: toIsoString(data.updatedAt),
+  }
+}
+
+/** One line of the report timeline. */
+function historyEntry(status, note, at) {
+  return {
+    status,
+    at: at || new Date().toISOString(),
+    note: note || '',
   }
 }
 
@@ -219,11 +234,7 @@ export async function createReport(input) {
       locationName: input.locationName || 'Location selected on map',
       photoUrl,
       status: DEFAULT_STATUS,
-      statusHistory: [{
-  status: DEFAULT_STATUS,
-  at: reportedAt,
-  note: 'Report submitted',
-}],
+      statusHistory: [historyEntry(DEFAULT_STATUS, 'Report submitted')],
       reportedBy: input.reportedBy || 'Anonymous',
       reportedAt: new Date().toISOString(),
       ownerUid: DEMO_OWNER_UID,
@@ -260,6 +271,9 @@ export async function createReport(input) {
     locationName: input.locationName || 'Location selected on map',
     photoUrl: '',
     status: DEFAULT_STATUS,
+    // The timeline starts here, so the report is not born with a blank
+    // history in Firebase mode.
+    statusHistory: [historyEntry(DEFAULT_STATUS, 'Report submitted', reportedAt)],
     reportedBy: input.reportedBy || 'Anonymous',
     reportedAt,
     ownerUid,
@@ -416,7 +430,7 @@ export async function updateReport(id, input = {}) {
  * Moderator only. This is the function behind the status dropdown on the
  * report details page.
  */
-export async function setReportStatus(id, status) {
+export async function setReportStatus(id, status, note = '') {
   if (!status) throw new Error('Pick a status first.')
 
   if (!isFirebaseConfigured || !db) {
@@ -425,7 +439,13 @@ export async function setReportStatus(id, status) {
     let updated = null
     const next = saved.map((report) => {
       if (report.id !== id) return report
-      updated = { ...report, status }
+      // Keep the old steps and add the new one on the end.
+      const history = Array.isArray(report.statusHistory) ? report.statusHistory : []
+      updated = {
+        ...report,
+        status,
+        statusHistory: [...history, historyEntry(status, note)],
+      }
       return updated
     })
     if (!updated) throw new Error('That report is not stored in this browser.')
@@ -434,7 +454,18 @@ export async function setReportStatus(id, status) {
   }
 
   try {
-    await updateDoc(doc(db, 'reports', id), { status })
+    // Read it first, so the old steps are kept and the new one is added.
+    const snapshot = await getDoc(doc(db, 'reports', id))
+    if (!snapshot.exists()) throw new Error('That report no longer exists.')
+
+    const oldHistory = Array.isArray(snapshot.data()?.statusHistory)
+      ? snapshot.data().statusHistory
+      : []
+
+    await updateDoc(doc(db, 'reports', id), {
+      status,
+      statusHistory: [...oldHistory, historyEntry(status, note)],
+    })
   } catch (error) {
     throw explainWriteError(error)
   }
@@ -528,4 +559,203 @@ export async function getEvents() {
 
 export async function uploadReportPhoto(file) {
   return uploadPhoto(file)
+}
+
+// ===========================================================================
+// NEIGHBOUR CONFIRMATIONS
+//
+// "I saw this too" - a neighbour confirms that the problem is really there.
+//
+// WHY IT IS BUILT THIS WAY
+//   The obvious way is to store one small document per person under the
+//   report and count them. But the document id IS the person's anonymous
+//   user id, so anyone allowed to read that collection can read every
+//   user's id. That is a privacy leak we do not want.
+//
+//   So we keep TWO things apart:
+//     reportConfirmations/{reportId}  ->  { count: 3 }   public, no ids
+//     myConfirmations/{uid}           ->  { reportId: true }  private
+//   The count is a plain number. No user id is ever published.
+// ===========================================================================
+
+/** How many neighbours have confirmed this report? */
+export async function getReportConfirmationCount(id) {
+  if (!id) return 0
+
+  if (!isFirebaseConfigured || !db) {
+    const store = readStore(CONFIRMATIONS_KEY, { counts: {}, mine: {} })
+    return Number(store.counts?.[id] || 0)
+  }
+
+  try {
+    const snapshot = await getDoc(doc(db, 'reportConfirmations', id))
+    return Number(snapshot.data()?.count || 0)
+  } catch {
+    return 0
+  }
+}
+
+/** Has THIS browser already confirmed this report? */
+export async function hasConfirmedReport(id) {
+  if (!id) return false
+
+  if (!isFirebaseConfigured || !db) {
+    const store = readStore(CONFIRMATIONS_KEY, { counts: {}, mine: {} })
+    return Boolean(store.mine?.[id])
+  }
+
+  try {
+    const user = await ensureSignedIn()
+    if (!user?.uid) return false
+    const snapshot = await getDoc(doc(db, 'myConfirmations', user.uid))
+    return Boolean(snapshot.data()?.[id])
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Confirm a report (or undo it).
+ * Returns { count, confirmed } so the page can update straight away.
+ */
+export async function confirmReport(id, confirmed = true) {
+  if (!id) throw new Error('Which report?')
+
+  if (!isFirebaseConfigured || !db) {
+    await fakeNetworkDelay(150)
+    const store = readStore(CONFIRMATIONS_KEY, { counts: {}, mine: {} })
+    const counts = { ...(store.counts || {}) }
+    const mine = { ...(store.mine || {}) }
+
+    const wasConfirmed = Boolean(mine[id])
+    if (confirmed && !wasConfirmed) {
+      counts[id] = Number(counts[id] || 0) + 1
+      mine[id] = true
+    } else if (!confirmed && wasConfirmed) {
+      counts[id] = Math.max(0, Number(counts[id] || 0) - 1)
+      delete mine[id]
+    }
+
+    writeStore(CONFIRMATIONS_KEY, { counts, mine })
+    return { count: Number(counts[id] || 0), confirmed: Boolean(mine[id]) }
+  }
+
+  try {
+    const user = await ensureSignedIn()
+    if (!user?.uid) {
+      throw new Error('You need to be signed in to confirm a report.')
+    }
+
+    const countRef = doc(db, 'reportConfirmations', id)
+    const mineRef = doc(db, 'myConfirmations', user.uid)
+
+    const result = await runTransaction(db, async (transaction) => {
+      const countSnap = await transaction.get(countRef)
+      const mineSnap = await transaction.get(mineRef)
+
+      const currentCount = Number(countSnap.data()?.count || 0)
+      const alreadyConfirmed = Boolean(mineSnap.data()?.[id])
+
+      let nextCount = currentCount
+
+      if (confirmed && !alreadyConfirmed) {
+        transaction.set(mineRef, { [id]: true }, { merge: true })
+        transaction.set(countRef, { count: increment(1) }, { merge: true })
+        nextCount = currentCount + 1
+      } else if (!confirmed && alreadyConfirmed) {
+        transaction.set(mineRef, { [id]: false }, { merge: true })
+        transaction.set(countRef, { count: increment(-1) }, { merge: true })
+        nextCount = Math.max(0, currentCount - 1)
+      }
+
+      return { count: nextCount, confirmed: confirmed }
+    })
+
+    return result
+  } catch (error) {
+    throw explainWriteError(error)
+  }
+}
+
+/** Shortcut: confirm it (or un-confirm it if it was already confirmed). */
+export async function toggleReportConfirmation(id) {
+  const already = await hasConfirmedReport(id)
+  return confirmReport(id, !already)
+}
+
+// ===========================================================================
+// FOLLOWING A REPORT
+//
+// "Tell me when this gets fixed." The list of followed reports is stored
+// per person, so it follows you to another browser or phone.
+// ===========================================================================
+
+/** The ids of the reports this person follows. */
+export async function getFollowedReportIds() {
+  if (!isFirebaseConfigured || !db) {
+    const store = readStore(FOLLOWING_KEY, [])
+    return Array.isArray(store) ? store : []
+  }
+
+  try {
+    const user = await ensureSignedIn()
+    if (!user?.uid) return []
+    const snapshot = await getDocs(collection(db, 'following', user.uid))
+    return snapshot.docs.map((item) => item.id)
+  } catch {
+    return []
+  }
+}
+
+/** Is this person following this report? */
+export async function isFollowingReport(id) {
+  if (!id) return false
+
+  if (!isFirebaseConfigured || !db) {
+    const store = readStore(FOLLOWING_KEY, [])
+    return Array.isArray(store) && store.includes(id)
+  }
+
+  try {
+    const user = await ensureSignedIn()
+    if (!user?.uid) return false
+    const snapshot = await getDoc(doc(db, 'following', user.uid, id))
+    return snapshot.exists()
+  } catch {
+    return false
+  }
+}
+
+/** Follow a report, or stop following it. Returns the new state. */
+export async function toggleFollowReport(id) {
+  if (!id) throw new Error('Which report?')
+
+  if (!isFirebaseConfigured || !db) {
+    await fakeNetworkDelay(150)
+    const store = readStore(FOLLOWING_KEY, [])
+    const list = Array.isArray(store) ? store : []
+    const next = list.includes(id) ? list.filter((item) => item !== id) : [...list, id]
+    writeStore(FOLLOWING_KEY, next)
+    return { following: next.includes(id) }
+  }
+
+  try {
+    const user = await ensureSignedIn()
+    if (!user?.uid) {
+      throw new Error('You need to be signed in to follow a report.')
+    }
+
+    const ref = doc(db, 'following', user.uid, id)
+    const snapshot = await getDoc(ref)
+
+    if (snapshot.exists()) {
+      await deleteDoc(ref)
+      return { following: false }
+    }
+
+    await setDoc(ref, { followedAt: new Date().toISOString() })
+    return { following: true }
+  } catch (error) {
+    throw explainWriteError(error)
+  }
 }

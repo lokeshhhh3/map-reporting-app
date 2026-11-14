@@ -26,4 +26,18 @@ export default defineConfig(({ command }) => ({
     strictPort: false,
     allowedHosts: true, // allow preview/proxy hosts (harmless locally)
   },
+
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('/node_modules/')) return undefined
+          if (id.includes('/node_modules/@firebase/firestore/')) return 'firebase-firestore'
+          if (id.includes('/node_modules/@firebase/')) return 'firebase-core'
+          if (id.includes('/node_modules/firebase/')) return 'firebase-sdk'
+          return undefined
+        },
+      },
+    },
+  },
 }))

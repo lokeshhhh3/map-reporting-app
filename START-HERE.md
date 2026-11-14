@@ -305,11 +305,9 @@ files one at a time, telling you exactly which file to open and what goes in it.
 
 ### A note on what's already built
 
-To save you time, I've already written the code for **Steps 1–4** into this workspace
-folder. Two things are still missing and I'll finish them when you ask:
-
-- `src/pages/ReportPage.jsx`, `News.jsx`, `Events.jsx`, `NotFound.jsx`
-- `src/styles/index.css` (the stylesheet — without it the app runs but looks plain)
+The project pages and stylesheet are already present, including the Navigate page.
+Start by running the app and exploring the existing screens. Some setup and backend
+integration may still need to be completed for your own Firebase project.
 
 So you have two paths:
 

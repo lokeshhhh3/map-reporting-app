@@ -22,7 +22,7 @@ import { getBrowserLocation, formatDistance } from '../utils/geo.js'
 // ---------------------------------------------------------------------------
 export default function ReportPage() {
   const navigate = useNavigate()
-  const { addReport } = useReports()
+  const { addReport, reports } = useReports()
 
   const [selectedLocation, setSelectedLocation] = useState(null)
   const [submitting, setSubmitting] = useState(false)
@@ -139,6 +139,7 @@ export default function ReportPage() {
               locating={locating}
               locationNote={locationNote}
               errorMessage={errorMessage}
+              existingReports={reports}
             />
           </div>
 

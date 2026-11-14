@@ -16,6 +16,11 @@ import {
   getReports,
   setReportStatus,
   updateReport,
+  getReportConfirmationCount,
+  hasConfirmedReport,
+  toggleReportConfirmation,
+  toggleFollowReport,
+  isFollowingReport,
 } from '../services/api.js'
 import { REPORT_STATUSES } from '../utils/constants.js'
 import { formatDateTime, formatLatLng } from '../utils/mapMath.js'
@@ -48,6 +53,13 @@ export default function ReportDetails() {
   // --- moderator ---
   const [moderating, setModerating] = useState(false)
 
+  // --- neighbours: confirmations and following ---
+  const [confirmCount, setConfirmCount] = useState(0)
+  const [confirmedByMe, setConfirmedByMe] = useState(false)
+  const [confirmBusy, setConfirmBusy] = useState(false)
+  const [following, setFollowing] = useState(false)
+  const [followBusy, setFollowBusy] = useState(false)
+
   useEffect(() => {
     let active = true
 
@@ -61,6 +73,17 @@ export default function ReportDetails() {
         setReport(found)
 
         if (found) {
+          // How many neighbours have confirmed it, and has this browser?
+          const [count, mine, follow] = await Promise.all([
+            getReportConfirmationCount(found.id),
+            hasConfirmedReport(found.id),
+            isFollowingReport(found.id),
+          ])
+          if (!active) return
+          setConfirmCount(count)
+          setConfirmedByMe(Boolean(mine))
+          setFollowing(Boolean(follow))
+
           // "Nearby" = other reports within roughly 2 km of this one.
           // About 0.018 degrees of latitude is ~2 km.
           const all = await getReports()
@@ -179,6 +202,35 @@ export default function ReportDetails() {
   const iAmOwner = canEditReport(report)
   const iAmModerator = canModerate()
   const showEditControls = iAmOwner || iAmModerator
+
+  /** "I saw this too" - confirm (or un-confirm) this report. */
+  async function handleConfirm() {
+    setConfirmBusy(true)
+    setActionError('')
+    try {
+      const result = await toggleReportConfirmation(report.id)
+      setConfirmedByMe(result.confirmed)
+      setConfirmCount(result.count)
+    } catch (err) {
+      setActionError(err?.message || 'Could not confirm this report.')
+    } finally {
+      setConfirmBusy(false)
+    }
+  }
+
+  /** Follow this report so it is easy to find again. */
+  async function handleFollow() {
+    setFollowBusy(true)
+    setActionError('')
+    try {
+      const result = await toggleFollowReport(report.id)
+      setFollowing(result.following)
+    } catch (err) {
+      setActionError(err?.message || 'Could not follow this report.')
+    } finally {
+      setFollowBusy(false)
+    }
+  }
 
   return (
     <section className="container page">
@@ -312,6 +364,56 @@ export default function ReportDetails() {
             <h2>Location</h2>
             {/* The Maps Team's mini-map comes in here (see MiniMap.jsx) */}
             <MiniMap lat={report.lat} lng={report.lng} report={report} />
+          </section>
+
+          <section className="details-section">
+            <h2>Progress</h2>
+            {report.statusHistory && report.statusHistory.length ? (
+              <ol className="timeline">
+                {report.statusHistory.map((entry, index) => (
+                  <li key={`${entry.at}-${index}`} className="timeline__item">
+                    <span className="timeline__dot" aria-hidden="true" />
+                    <div className="timeline__body">
+                      <StatusBadge status={entry.status} />
+                      <small>{formatDateTime(entry.at)}</small>
+                      {entry.note ? <p>{entry.note}</p> : null}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="muted">
+                No progress has been recorded for this report yet.
+              </p>
+            )}
+          </section>
+
+          <section className="details-section">
+            <h2>Neighbours</h2>
+            <div className="confirm-box">
+              <p>
+                <strong>{confirmCount}</strong>{' '}
+                {confirmCount === 1 ? 'neighbour has' : 'neighbours have'} confirmed this report.
+              </p>
+              <div className="confirm-box__actions">
+                <button
+                  type="button"
+                  className="btn btn--outline btn--small"
+                  onClick={handleConfirm}
+                  disabled={confirmBusy}
+                >
+                  {confirmedByMe ? '✓ You confirmed this' : '✓ I saw this too'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small"
+                  onClick={handleFollow}
+                  disabled={followBusy}
+                >
+                  {following ? '🔔 Following' : '🔔 Follow this report'}
+                </button>
+              </div>
+            </div>
           </section>
 
           <section className="details-section">
