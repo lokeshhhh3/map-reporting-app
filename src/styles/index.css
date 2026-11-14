@@ -959,6 +959,49 @@ code {
 /* ===========================================================================
    7. MAP PAGE + THE MAP COMPONENT
    =========================================================================== */
+/* Keep the map visible while preserving every search and filter control. */
+.map-filters {
+  margin-bottom: 14px;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.map-filters > summary {
+  cursor: pointer;
+  padding: 12px 16px;
+  color: var(--slate-900);
+}
+
+.map-filters > summary span {
+  margin-left: 10px;
+  font-size: 0.85rem;
+  color: var(--slate-500);
+}
+
+.map-filters .filters { margin: 0; border: 0; border-top: 1px solid var(--slate-200); }
+
+.map-report-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  padding: 12px;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--slate-900);
+  cursor: pointer;
+}
+
+.map-report-row:hover, .map-report-row:focus-visible {
+  border-color: var(--blue-600);
+  background: var(--slate-50);
+}
+.map-report-row span { font-size: 0.83rem; color: var(--slate-700); }
+
 .map-layout {
   display: grid;
   grid-template-columns: 1fr 380px;

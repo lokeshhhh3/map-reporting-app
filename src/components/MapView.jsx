@@ -40,7 +40,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { DEFAULT_BOUNDS, formatLatLng, slugify } from '../utils/mapMath.js'
+import { DEFAULT_BOUNDS, slugify } from '../utils/mapMath.js'
 import { TYPE_ICONS } from '../utils/constants.js'
 
 // The map pictures come from OpenStreetMap's public tile servers.
@@ -104,7 +104,6 @@ export default function MapView({
   const reportsByIdRef = useRef(new Map()) // report id -> newest report object
   const hasFramedRef = useRef(false) // have we set the initial view yet?
   const [mapReady, setMapReady] = useState(false)
-  const [zoom, setZoom] = useState(12)
 
   // Leaflet event handlers are created ONCE, so they would otherwise keep
   // seeing old versions of our functions. This ref always holds the newest.
@@ -146,10 +145,7 @@ export default function MapView({
     map.on('click', () => map.scrollWheelZoom.enable())
     map.on('mouseout', () => map.scrollWheelZoom.disable())
 
-    map.on('zoomend', () => setZoom(map.getZoom()))
-
     mapRef.current = map
-    setZoom(map.getZoom())
     setMapReady(true)
 
     // If the container was still being laid out when the map was created,
@@ -326,8 +322,6 @@ export default function MapView({
     }
   }
 
-  const pinsInView = reports.filter(hasPosition).length
-
   return (
     <div className="map-view" style={{ height }}>
       {/* Leaflet draws the whole map inside this one <div> */}
@@ -365,11 +359,7 @@ export default function MapView({
           </ul>
         ) : null}
 
-        <span className="map-view__coords">
-          {hasPosition(selectedLocation)
-            ? `📍 ${formatLatLng(selectedLocation.lat, selectedLocation.lng)}`
-            : `${pinsInView} pin${pinsInView === 1 ? '' : 's'} · zoom ${zoom}`}
-        </span>
+        {hasPosition(selectedLocation) ? <span className="map-view__coords">Location selected</span> : null}
       </div>
     </div>
   )

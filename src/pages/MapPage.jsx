@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader.jsx'
 import MapView from '../components/MapView.jsx'
-import ReportCard from '../components/ReportCard.jsx'
 import ReportFilters from '../components/ReportFilters.jsx'
 import Loader from '../components/Loader.jsx'
 import EmptyState from '../components/EmptyState.jsx'
@@ -103,13 +102,18 @@ export default function MapPage() {
       <PageHeader
         eyebrow="Live view"
         title="Map"
-        subtitle="Every pin is a report placed at the exact latitude and longitude chosen on the map."
+        subtitle="Explore reports near you and select a pin for details."
       >
         <Link to="/report" className="btn btn--primary">
           + Report something here
         </Link>
       </PageHeader>
 
+      <details className="map-filters">
+        <summary>
+          <strong>Search and filters</strong>
+          {!loading && !error ? <span>{filteredReports.length} reports</span> : null}
+        </summary>
       <ReportFilters
         search={search}
         onSearchChange={setSearch}
@@ -128,6 +132,7 @@ export default function MapPage() {
         resultCount={filteredReports.length}
         onReset={resetFilters}
       />
+      </details>
 
       {locationError ? <p className="alert alert--error">{locationError}</p> : null}
 
@@ -135,7 +140,7 @@ export default function MapPage() {
         <p className="muted small">
           Showing reports nearest you first
           {radius ? ` · within ${radius} km` : ''}
-          {!radius ? ' · choose a distance above to narrow it down' : ''}
+          {!radius ? ' · open search and filters to choose a distance' : ''}
         </p>
       ) : null}
 
@@ -153,9 +158,9 @@ export default function MapPage() {
             />
           ) : null}
 
-          <p className="muted">
-            Showing {filteredReports.length} of {reports.length} reports. Use the filters above to narrow it down.
-          </p>
+          {!loading && !error ? (
+            <p className="muted small">Showing {filteredReports.length} of {reports.length} reports.</p>
+          ) : null}
         </div>
 
         <aside className="map-layout__panel card">
@@ -183,14 +188,6 @@ export default function MapPage() {
                   <dd>{selectedReport.locationName}</dd>
                 </div>
                 <div>
-                  <dt>Coordinates</dt>
-                  <dd>
-                    <code>
-                      {selectedReport.lat.toFixed(5)}, {selectedReport.lng.toFixed(5)}
-                    </code>
-                  </dd>
-                </div>
-                <div>
                   <dt>Reported</dt>
                   <dd>{formatDateTime(selectedReport.reportedAt)}</dd>
                 </div>
@@ -208,27 +205,26 @@ export default function MapPage() {
           ) : (
             <>
               <h3 className="card__title">Reports in this view</h3>
-              <p className="muted small">Click a pin on the map, or a card below.</p>
+              <p className="muted small">Choose a pin or select a report below.</p>
 
               {loading ? <Loader text="Loading reports…" /> : null}
 
-              {!loading && filteredReports.length === 0 ? (
+              {!loading && !error && filteredReports.length === 0 ? (
                 <EmptyState
                   icon="🔍"
                   title="No reports match"
-                  message="Try clearing the filters or moving to another part of the map."
+                  message="Try changing or clearing the filters."
                 />
               ) : null}
 
               <div className="map-layout__panel-list">
                 {filteredReports.map((report) => (
-                  <ReportCard
-                    key={report.id}
-                    report={report}
-                    compact
-                    onSelect={setSelectedReport}
-                    distanceLabel={report.distanceKm != null ? formatDistance(report.distanceKm) : ''}
-                  />
+                  <button key={report.id} type="button" className="map-report-row" onClick={() => setSelectedReport(report)}>
+                    <strong>{report.title}</strong>
+                    <span>{report.type} · {report.status}
+                      {report.distanceKm != null ? ` · ${formatDistance(report.distanceKm)} away` : ''}
+                    </span>
+                  </button>
                 ))}
               </div>
 
