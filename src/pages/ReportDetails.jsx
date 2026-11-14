@@ -54,11 +54,12 @@ export default function ReportDetails() {
   const [moderating, setModerating] = useState(false)
 
   // --- neighbours: confirmations and following ---
-  const [confirmCount, setConfirmCount] = useState(0)
+  const [confirmCount, setConfirmCount] = useState(null)
   const [confirmedByMe, setConfirmedByMe] = useState(false)
   const [confirmBusy, setConfirmBusy] = useState(false)
   const [following, setFollowing] = useState(false)
   const [followBusy, setFollowBusy] = useState(false)
+  const [neighbourLoadError, setNeighbourLoadError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -74,15 +75,19 @@ export default function ReportDetails() {
 
         if (found) {
           // How many neighbours have confirmed it, and has this browser?
-          const [count, mine, follow] = await Promise.all([
+          setConfirmCount(null)
+          setNeighbourLoadError('')
+          const [count, mine, follow] = await Promise.allSettled([
             getReportConfirmationCount(found.id),
             hasConfirmedReport(found.id),
             isFollowingReport(found.id),
           ])
           if (!active) return
-          setConfirmCount(count)
-          setConfirmedByMe(Boolean(mine))
-          setFollowing(Boolean(follow))
+          setConfirmCount(count.status === 'fulfilled' ? count.value : null)
+          setConfirmedByMe(mine.status === 'fulfilled' ? Boolean(mine.value) : false)
+          setFollowing(follow.status === 'fulfilled' ? Boolean(follow.value) : false)
+          const errors = [count, mine, follow].filter((result) => result.status === 'rejected')
+          if (errors.length) setNeighbourLoadError(errors.map((result) => result.reason?.message || 'Could not load neighbour information.').join(' '))
 
           // "Nearby" = other reports within roughly 2 km of this one.
           // About 0.018 degrees of latitude is ~2 km.
@@ -391,10 +396,14 @@ export default function ReportDetails() {
           <section className="details-section">
             <h2>Neighbours</h2>
             <div className="confirm-box">
-              <p>
-                <strong>{confirmCount}</strong>{' '}
-                {confirmCount === 1 ? 'neighbour has' : 'neighbours have'} confirmed this report.
-              </p>
+              {confirmCount === null ? (
+                <p>Confirmation count is unavailable.</p>
+              ) : (
+                <p><strong>{confirmCount}</strong>{' '}
+                  {confirmCount === 1 ? 'neighbour has' : 'neighbours have'} confirmed this report.
+                </p>
+              )}
+              {neighbourLoadError ? <p className="alert alert--error">{neighbourLoadError}</p> : null}
               <div className="confirm-box__actions">
                 <button
                   type="button"

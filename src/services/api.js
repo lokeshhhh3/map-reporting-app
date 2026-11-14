@@ -57,7 +57,6 @@ import {
   query,
   orderBy,
   where,
-  increment,
   runTransaction,
 } from 'firebase/firestore'
 
@@ -355,12 +354,17 @@ export function canEditReport(report) {
 /**
  * Turn a raw Firebase error into a sentence worth showing a person.
  */
-function explainWriteError(error) {
+function explainWriteError(error, action = 'edit') {
   const code = error?.code || ''
   if (code === 'permission-denied' || String(error?.message).includes('PERMISSION_DENIED')) {
-    return new Error(
-      'You are not allowed to change this report. You can only edit or delete a report you posted yourself.',
-    )
+    const messages = {
+      edit: 'You do not have permission to edit this report.',
+      delete: 'You do not have permission to delete this report.',
+      status: 'You do not have permission to change this report’s status.',
+      confirm: 'Could not confirm this report because access was denied. Please try again or contact support.',
+      follow: 'Could not change your follow preference because access was denied. Please try again or contact support.',
+    }
+    return new Error(messages[action] || 'You do not have permission to make this change.')
   }
   if (code === 'unavailable') {
     return new Error('You appear to be offline. Check your internet connection and try again.')
@@ -467,7 +471,7 @@ export async function setReportStatus(id, status, note = '') {
       statusHistory: [...oldHistory, historyEntry(status, note)],
     })
   } catch (error) {
-    throw explainWriteError(error)
+    throw explainWriteError(error, 'status')
   }
 
   return getReportById(id)
@@ -502,7 +506,7 @@ export async function deleteReport(id) {
 
     await deleteDoc(doc(db, 'reports', id))
   } catch (error) {
-    throw explainWriteError(error)
+    throw explainWriteError(error, 'delete')
   }
 }
 
@@ -574,7 +578,7 @@ export async function uploadReportPhoto(file) {
 //
 //   So we keep TWO things apart:
 //     reportConfirmations/{reportId}  ->  { count: 3 }   public, no ids
-//     myConfirmations/{uid}           ->  { reportId: true }  private
+//     confirmationUsers/{uid}/reports/{reportId} -> { confirmed: true } private
 //   The count is a plain number. No user id is ever published.
 // ===========================================================================
 
@@ -591,7 +595,7 @@ export async function getReportConfirmationCount(id) {
     const snapshot = await getDoc(doc(db, 'reportConfirmations', id))
     return Number(snapshot.data()?.count || 0)
   } catch {
-    return 0
+    throw new Error('Could not load the confirmation count. Please refresh and try again.')
   }
 }
 
@@ -606,11 +610,11 @@ export async function hasConfirmedReport(id) {
 
   try {
     const user = await ensureSignedIn()
-    if (!user?.uid) return false
-    const snapshot = await getDoc(doc(db, 'myConfirmations', user.uid))
-    return Boolean(snapshot.data()?.[id])
+    if (!user?.uid) throw new Error('Sign-in is unavailable.')
+    const snapshot = await getDoc(doc(db, 'confirmationUsers', user.uid, 'reports', id))
+    return snapshot.exists()
   } catch {
-    return false
+    throw new Error('Could not load your confirmation. Please refresh and try again.')
   }
 }
 
@@ -628,6 +632,7 @@ export async function confirmReport(id, confirmed = true) {
     const mine = { ...(store.mine || {}) }
 
     const wasConfirmed = Boolean(mine[id])
+    if (confirmed === null) confirmed = !wasConfirmed
     if (confirmed && !wasConfirmed) {
       counts[id] = Number(counts[id] || 0) + 1
       mine[id] = true
@@ -647,40 +652,40 @@ export async function confirmReport(id, confirmed = true) {
     }
 
     const countRef = doc(db, 'reportConfirmations', id)
-    const mineRef = doc(db, 'myConfirmations', user.uid)
+    const mineRef = doc(db, 'confirmationUsers', user.uid, 'reports', id)
 
     const result = await runTransaction(db, async (transaction) => {
       const countSnap = await transaction.get(countRef)
       const mineSnap = await transaction.get(mineRef)
 
       const currentCount = Number(countSnap.data()?.count || 0)
-      const alreadyConfirmed = Boolean(mineSnap.data()?.[id])
-
+      const alreadyConfirmed = mineSnap.exists()
+      const nextConfirmed = confirmed === null ? !alreadyConfirmed : confirmed
       let nextCount = currentCount
 
-      if (confirmed && !alreadyConfirmed) {
-        transaction.set(mineRef, { [id]: true }, { merge: true })
-        transaction.set(countRef, { count: increment(1) }, { merge: true })
+      if (nextConfirmed && !alreadyConfirmed) {
         nextCount = currentCount + 1
-      } else if (!confirmed && alreadyConfirmed) {
-        transaction.set(mineRef, { [id]: false }, { merge: true })
-        transaction.set(countRef, { count: increment(-1) }, { merge: true })
-        nextCount = Math.max(0, currentCount - 1)
+        transaction.set(mineRef, { confirmed: true })
+        transaction.set(countRef, { count: nextCount })
+      } else if (!nextConfirmed && alreadyConfirmed) {
+        if (currentCount < 1) throw new Error('The confirmation count is out of sync. Please contact support.')
+        nextCount = currentCount - 1
+        transaction.delete(mineRef)
+        transaction.set(countRef, { count: nextCount })
       }
 
-      return { count: nextCount, confirmed: confirmed }
+      return { count: nextCount, confirmed: nextConfirmed }
     })
 
     return result
   } catch (error) {
-    throw explainWriteError(error)
+    throw explainWriteError(error, 'confirm')
   }
 }
 
 /** Shortcut: confirm it (or un-confirm it if it was already confirmed). */
 export async function toggleReportConfirmation(id) {
-  const already = await hasConfirmedReport(id)
-  return confirmReport(id, !already)
+  return confirmReport(id, null)
 }
 
 // ===========================================================================
@@ -700,7 +705,7 @@ export async function getFollowedReportIds() {
   try {
     const user = await ensureSignedIn()
     if (!user?.uid) return []
-    const snapshot = await getDocs(collection(db, 'following', user.uid))
+    const snapshot = await getDocs(collection(db, 'following', user.uid, 'reports'))
     return snapshot.docs.map((item) => item.id)
   } catch {
     return []
@@ -718,11 +723,11 @@ export async function isFollowingReport(id) {
 
   try {
     const user = await ensureSignedIn()
-    if (!user?.uid) return false
-    const snapshot = await getDoc(doc(db, 'following', user.uid, id))
+    if (!user?.uid) throw new Error('Sign-in is unavailable.')
+    const snapshot = await getDoc(doc(db, 'following', user.uid, 'reports', id))
     return snapshot.exists()
   } catch {
-    return false
+    throw new Error('Could not load your follow preference. Please refresh and try again.')
   }
 }
 
@@ -745,7 +750,7 @@ export async function toggleFollowReport(id) {
       throw new Error('You need to be signed in to follow a report.')
     }
 
-    const ref = doc(db, 'following', user.uid, id)
+    const ref = doc(db, 'following', user.uid, 'reports', id)
     const snapshot = await getDoc(ref)
 
     if (snapshot.exists()) {
@@ -756,6 +761,6 @@ export async function toggleFollowReport(id) {
     await setDoc(ref, { followedAt: new Date().toISOString() })
     return { following: true }
   } catch (error) {
-    throw explainWriteError(error)
+    throw explainWriteError(error, 'follow')
   }
 }
