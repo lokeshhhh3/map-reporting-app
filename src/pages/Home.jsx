@@ -19,7 +19,7 @@ export default function Home() {
   const navigate = useNavigate()
   const { reports, loading, error } = useReports()
   const { data: news } = useAsyncData(getNews)
-  const { data: events } = useAsyncData(getEvents)
+  const { data: events, loading: eventsLoading, error: eventsError } = useAsyncData(getEvents)
 
   // A few numbers for the small statistics strip.
   const stats = useMemo(() => {
@@ -53,19 +53,19 @@ export default function Home() {
 
           <ul className="stat-strip">
             <li>
-              <strong>{stats.total}</strong>
+              <StatValue value={stats.total} loading={loading} error={error} />
               <span>Total reports</span>
             </li>
             <li>
-              <strong>{stats.open}</strong>
+              <StatValue value={stats.open} loading={loading} error={error} />
               <span>Open / in progress</span>
             </li>
             <li>
-              <strong>{stats.resolved}</strong>
+              <StatValue value={stats.resolved} loading={loading} error={error} />
               <span>Resolved</span>
             </li>
             <li>
-              <strong>{stats.upcoming}</strong>
+              <StatValue value={stats.upcoming} loading={eventsLoading} error={eventsError} />
               <span>Upcoming events</span>
             </li>
           </ul>
@@ -222,4 +222,17 @@ export default function Home() {
       </div>
     </div>
   )
+}
+
+// Loading is different from a genuine count of zero or an unavailable count.
+function StatValue({ value, loading, error }) {
+  if (loading) {
+    return (
+      <strong aria-label="Loading count">
+        <span className="stat-strip__skeleton" aria-hidden="true" />
+      </strong>
+    )
+  }
+  if (error) return <strong aria-label="Count unavailable">—</strong>
+  return <strong>{value}</strong>
 }

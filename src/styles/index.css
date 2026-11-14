@@ -735,6 +735,25 @@ code {
   color: #c3cfe4;
 }
 
+/* Placeholder until the real count arrives; it is not a fake zero. */
+.stat-strip .stat-strip__skeleton {
+  display: inline-block;
+  width: 2.5rem;
+  height: 1.2rem;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.35);
+  animation: stat-pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes stat-pulse {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stat-strip .stat-strip__skeleton { animation: none; }
+}
+
 /* Quick access tiles */
 .tile-grid {
   display: grid;
