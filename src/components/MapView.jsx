@@ -39,7 +39,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
+import 'leaflet.markercluster'
 import 'leaflet/dist/leaflet.css'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import { DEFAULT_BOUNDS, slugify } from '../utils/mapMath.js'
 import { TYPE_ICONS } from '../utils/constants.js'
 
@@ -96,9 +99,11 @@ export default function MapView({
   showLegend = true,
   showZoom = true,
   initialBounds = null,
+  clusterReports = false,
 }) {
   const containerRef = useRef(null) // the <div> Leaflet draws into
   const mapRef = useRef(null) // the Leaflet map object
+  const clusterRef = useRef(null) // optional group for the map browsing page
   const markersRef = useRef(new Map()) // report id -> Leaflet marker
   const pickedRef = useRef(null) // the "just picked" marker
   const reportsByIdRef = useRef(new Map()) // report id -> newest report object
@@ -130,6 +135,26 @@ export default function MapView({
 
     L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map)
 
+    if (clusterReports) {
+      const group = L.markerClusterGroup({
+        maxClusterRadius: 55,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        spiderfyOnMaxZoom: true,
+        iconCreateFunction(cluster) {
+          const count = cluster.getChildCount()
+          const size = count < 10 ? 'small' : count < 100 ? 'medium' : 'large'
+          return L.divIcon({
+            html: `<div><span aria-label="${count} reports. Activate to zoom or expand.">${count}</span></div>`,
+            className: `marker-cluster marker-cluster-${size}`,
+            iconSize: L.point(40, 40),
+          })
+        },
+      })
+      group.addTo(map)
+      clusterRef.current = group
+    }
+
     const start = fallbackBounds
     map.setView([(start.north + start.south) / 2, (start.east + start.west) / 2], 12)
 
@@ -156,6 +181,7 @@ export default function MapView({
       clearTimeout(timer)
       map.remove() // Leaflet requires this or the <div> stays "used"
       mapRef.current = null
+      clusterRef.current = null
       markersRef.current.clear()
       pickedRef.current = null
       hasFramedRef.current = false
@@ -242,12 +268,14 @@ export default function MapView({
         handler(reportsByIdRef.current.get(report.id) || report)
       })
 
-      marker.addTo(map)
-
-      // Because the pin is a <div> (a "divIcon"), Leaflet ignores `alt`, so
-      // we give it its name for screen readers ourselves.
-      const pinElement = marker.getElement()
-      if (pinElement) pinElement.setAttribute('aria-label', report.title)
+      // Clustered markers can be added to the DOM later, e.g. after zooming.
+      marker.on('add', () => {
+        const element = marker.getElement()
+        const current = reportsByIdRef.current.get(report.id) || report
+        if (element) element.setAttribute('aria-label', current.title)
+      })
+      if (clusterRef.current) clusterRef.current.addLayer(marker)
+      else marker.addTo(map)
 
       markers.set(report.id, marker)
     })
@@ -255,7 +283,8 @@ export default function MapView({
     // Remove pins for reports that are no longer being shown.
     markers.forEach((marker, id) => {
       if (!seen.has(id)) {
-        marker.remove()
+        if (clusterRef.current) clusterRef.current.removeLayer(marker)
+        else marker.remove()
         markers.delete(id)
       }
     })

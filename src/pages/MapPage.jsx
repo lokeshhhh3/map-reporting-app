@@ -153,6 +153,7 @@ export default function MapPage() {
             <MapView
               reports={filteredReports}
               height="560px"
+              clusterReports
               activeId={selectedReport?.id ?? null}
               onMarkerClick={(report) => setSelectedReport(report)}
             />
