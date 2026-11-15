@@ -1,68 +1,37 @@
-// ===========================================================================
-// placeSearch.js  --  "type a place name"  ->  latitude / longitude
-//
-// We use OpenStreetMap's Nominatim service. It is FREE, needs no API key,
-// no account, no credit card and no billing.
-//
-// Nominatim's rules (we must follow them, or our IP gets blocked):
-//   * At most 1 request per second.
-//   * Results must be cached, not re-fetched for the same text.
-//   * The app must identify itself - the browser sends the page address
-//     automatically, which is enough.
-//
-// There is also a small in-memory cache here, so typing "Uppal" three times
-// does not hit the network three times.
-// ===========================================================================
-
-const ENDPOINT = import.meta.env.VITE_NOMINAT_URL || 'https://nominatim.openstreetmap.org'
-
-// Only look inside India, because our college is in Hyderabad.
-// Change this to '' if you ever want to search the whole world.
-const COUNTRY_CODES = 'in'
-
-// Nominatim allows 1 request per second. We use 1.1s to be safe.
-const MIN_GAP_MS = 1100
-
-// How many searches we keep in memory.
+// Place search for Navigate. Photon is an OpenStreetMap-based geocoder that
+// supports search-as-you-type. Its public endpoint is a demo service with no
+// availability guarantee; VITE_PLACE_SEARCH_URL can point to another Photon
+// instance. Keep results in memory only, and never cache failures.
+const ENDPOINT = (import.meta.env.VITE_PLACE_SEARCH_URL || 'https://photon.komoot.io').replace(/\/+$/, '')
 const CACHE_LIMIT = 40
-
+const REQUEST_TIMEOUT_MS = 10000
 const cache = new Map()
-let lastRequestAt = 0
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
+function toPlace(feature) {
+  if (feature?.geometry?.type !== 'Point') return null
+  const coordinates = feature.geometry.coordinates
+  if (!Array.isArray(coordinates) || coordinates.length < 2) return null
+  const [lng, lat] = coordinates
+  if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)) return null
 
-// Waits until at least MIN_GAP_MS has passed since our previous request.
-async function waitForTurn() {
-  const now = Date.now()
-  const wait = Math.max(0, lastRequestAt + MIN_GAP_MS - now)
-  lastRequestAt = now + wait
-  if (wait > 0) await sleep(wait)
-}
-
-// Turns one raw Nominatim result into the small, clean object our app uses.
-function toPlace(item) {
-  const parts = String(item.display_name || '').split(',')
+  const details = feature.properties || {}
+  // Keep the existing India-only scope when country information is present.
+  if (details.countrycode && String(details.countrycode).toUpperCase() !== 'IN') return null
+  const name = details.name || details.street || details.city || details.district
+  if (!name) return null
+  const addressParts = [details.street, details.locality, details.district, details.city, details.county, details.state, details.postcode, details.country]
+  const address = [...new Set(addressParts.filter((part) => part && part !== name))].join(', ')
   return {
-    id: String(item.place_id),
-    name: item.name || parts[0] || 'Unnamed place',
-    address: parts.slice(1).join(',').trim() || item.display_name || '',
-    lat: Number(item.lat),
-    lng: Number(item.lon),
-    kind: item.addresstype || item.category || item.type || 'place',
+    id: details.osm_id != null ? `${details.osm_type || 'osm'}-${details.osm_id}` : `${lat},${lng},${name}`,
+    name,
+    address: address || 'India',
+    lat,
+    lng,
+    kind: details.osm_value || details.type || 'place',
   }
 }
 
-/**
- * Search for places, addresses and landmarks.
- *
- * @param  {string} query               what the user typed
- * @param  {object} [options]
- * @param  {number} [options.limit]     how many suggestions to return
- * @returns {Promise<Array>}            [] when the query is too short
- * @throws  {Error}                     when the network call fails
- */
+/** Search for a place in India. A failed service is not an empty result. */
 export async function searchPlaces(query, { limit = 6 } = {}) {
   const text = String(query || '').trim()
   if (text.length < 3) return []
@@ -71,31 +40,40 @@ export async function searchPlaces(query, { limit = 6 } = {}) {
   if (cache.has(cacheKey)) return cache.get(cacheKey)
 
   const params = new URLSearchParams({
-    format: 'jsonv2',
-    addressdetails: '1',
-    namedetails: '1',
-    limit: String(limit),
     q: text,
+    limit: String(limit),
+    lang: 'en',
+    // Rank results near Hyderabad higher, without pretending the user is there.
+    lat: '17.385',
+    lon: '78.4867',
+    bbox: '68,6,98,38',
   })
-  if (COUNTRY_CODES) params.set('countrycodes', COUNTRY_CODES)
-
-  await waitForTurn()
-
-  const response = await fetch(`${ENDPOINT}/search?${params.toString()}`, {
-    headers: { Accept: 'application/json' },
-  })
-
-  if (!response.ok) {
-    throw new Error(`Place search failed (${response.status}). Please try again.`)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  let response
+  try {
+    response = await fetch(`${ENDPOINT}/api/?${params.toString()}`, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    })
+    if (!response.ok) {
+      if (response.status === 429) throw new Error('Place search is busy. Wait a moment and try again.')
+      throw new Error('Place search is temporarily unavailable. Please try again.')
+    }
+    const data = await response.json()
+    if (!data || !Array.isArray(data.features)) {
+      throw new Error('Place search returned an unexpected response. Please try again.')
+    }
+    const results = data.features.map(toPlace).filter(Boolean)
+    cache.set(cacheKey, results)
+    if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value)
+    return results
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('Place search timed out. Check your connection and try again.')
+    if (error instanceof TypeError) throw new Error('Could not connect to place search. Check your connection and try again.')
+    if (error instanceof SyntaxError) throw new Error('Place search returned an unexpected response. Please try again.')
+    throw error
+  } finally {
+    clearTimeout(timer)
   }
-
-  const data = await response.json()
-  const results = Array.isArray(data)
-    ? data.map(toPlace).filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng))
-    : []
-
-  cache.set(cacheKey, results)
-  if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value)
-
-  return results
 }

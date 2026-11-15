@@ -72,6 +72,7 @@ export default function NavigatePage() {
   const [searching, setSearching] = useState(false)
   const [searchComplete, setSearchComplete] = useState(false)
   const [searchError, setSearchError] = useState('')
+  const [searchAttempt, setSearchAttempt] = useState(0)
 
   // ---- the route ----
   const [routes, setRoutes] = useState([]) // every route option we found
@@ -160,14 +161,14 @@ export default function NavigatePage() {
       } finally {
         if (id === requestId.current) setSearching(false)
       }
-    }, 450)
+    }, 900)
 
     return () => {
       clearTimeout(timer)
       // Invalidate a request already in flight when the query changes or clears.
       if (requestId.current === id) requestId.current += 1
     }
-  }, [query, activeField, origin?.name, destination?.name])
+  }, [query, activeField, origin?.name, destination?.name, searchAttempt])
 
   // ------------------------------------------------------------------
   // THE ROUTE - recalculated whenever a point or the travel mode changes.
@@ -473,7 +474,7 @@ export default function NavigatePage() {
           </div>
           {showSuggestions ? <ul className="nm-suggestions" aria-label="Place search results">
             {searching ? <li className="nm-suggestions__empty" role="status">Searching…</li> : null}
-            {searchError ? <li className="nm-suggestions__error">{searchError}</li> : null}
+            {searchError ? <li className="nm-suggestions__error" role="alert">{searchError} <button type="button" className="link-button" onClick={() => setSearchAttempt((attempt) => attempt + 1)}>Try again</button></li> : null}
             {suggestions.map((place) => <li key={place.id}><button type="button" onClick={() => { pickSuggestion(place); window.setTimeout(() => searchRef.current?.focus(), 0) }}><strong>{place.name}</strong><span>{place.address}</span></button></li>)}
             {!searching && !searchError && searchComplete && suggestions.length === 0 ? <li className="nm-suggestions__empty">No place found. Try a bigger name, like “Uppal, Hyderabad”.</li> : null}
           </ul> : null}
