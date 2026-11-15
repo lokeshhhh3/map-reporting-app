@@ -253,7 +253,10 @@ export async function createReport(input) {
   //    the uid on the report so the rules can later tell "the person who
   //    posted this" apart from everybody else.
   const user = await ensureSignedIn()
-  const ownerUid = user?.uid || ''
+  if (!user?.uid) {
+    throw new Error('Could not sign you in to submit the report. Check your connection and try again.')
+  }
+  const ownerUid = user.uid
   const reportedAt = new Date().toISOString()
 
   // 1. Save the report itself.
