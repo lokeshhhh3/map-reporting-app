@@ -17,13 +17,14 @@ export default function Footer() {
         <div className="footer__links">
           <Link to="/map">Map</Link>
           <Link to="/reports">Reports</Link>
+          <Link to="/navigate">Navigate</Link>
           <Link to="/news">News</Link>
           <Link to="/events">Events</Link>
           <Link to="/report">Create Report</Link>
         </div>
 
         <p className="footer__note">
-          Frontend build · {year} · Maps by Maps Team · Data by Backend Team
+          © {year} Map Reporting App · Map data © OpenStreetMap contributors
         </p>
       </div>
     </footer>

@@ -1,5 +1,4 @@
 import MapView from './MapView.jsx'
-import { formatLatLng } from '../utils/mapMath.js'
 
 // ---------------------------------------------------------------------------
 // MiniMap  --  the small non-clickable map used on the Report Details page.
@@ -34,7 +33,7 @@ export default function MiniMap({ lat, lng, report = null, height = '220px', tit
         initialBounds={initialBounds}
       />
       <figcaption>
-        {title} · <code>{formatLatLng(lat, lng)}</code>
+        {title}
       </figcaption>
     </figure>
   )

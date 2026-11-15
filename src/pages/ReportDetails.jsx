@@ -23,7 +23,7 @@ import {
   isFollowingReport,
 } from '../services/api.js'
 import { REPORT_STATUSES } from '../utils/constants.js'
-import { formatDateTime, formatLatLng } from '../utils/mapMath.js'
+import { formatDateTime } from '../utils/mapMath.js'
 
 // ---------------------------------------------------------------------------
 // REPORT DETAILS PAGE  (Step 3 of the plan)
@@ -49,6 +49,8 @@ export default function ReportDetails() {
   const [editLocation, setEditLocation] = useState(null)
   const [saving, setSaving] = useState(false)
   const [actionError, setActionError] = useState('')
+  const [shareMessage, setShareMessage] = useState('')
+  const [shareFallbackUrl, setShareFallbackUrl] = useState('')
 
   // --- moderator ---
   const [moderating, setModerating] = useState(false)
@@ -234,6 +236,32 @@ export default function ReportDetails() {
       setActionError(err?.message || 'Could not follow this report.')
     } finally {
       setFollowBusy(false)
+    }
+  }
+
+  async function handleShare() {
+    setShareMessage('')
+    setShareFallbackUrl('')
+    const url = new URL(window.location.href)
+    url.hash = `/reports/${encodeURIComponent(report.id)}`
+    const link = url.toString()
+
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: report.title, url: link })
+        return
+      } catch (error) {
+        if (error?.name === 'AbortError') return
+        // If the share sheet fails, try copying instead.
+      }
+    }
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable')
+      await navigator.clipboard.writeText(link)
+      setShareMessage('Report link copied.')
+    } catch {
+      setShareFallbackUrl(link)
+      setShareMessage('Copy this link to share the report:')
     }
   }
 
@@ -436,23 +464,11 @@ export default function ReportDetails() {
               </div>
               <div>
                 <dt>Place</dt>
-                <dd>{report.locationName || '—'}</dd>
-              </div>
-              <div>
-                <dt>Coordinates</dt>
-                <dd>
-                  <code>{formatLatLng(report.lat, report.lng)}</code>
-                </dd>
+                <dd>{!report.locationName || report.locationName === 'Location selected on map' ? 'Pinned location (see map)' : report.locationName}</dd>
               </div>
               <div>
                 <dt>Reported by</dt>
                 <dd>{report.reportedBy || 'Anonymous'}</dd>
-              </div>
-              <div>
-                <dt>Report ID</dt>
-                <dd>
-                  <code>{report.id}</code>
-                </dd>
               </div>
             </dl>
           </section>
@@ -461,12 +477,21 @@ export default function ReportDetails() {
           )}
 
           <footer className="details-main__actions">
+            <button type="button" className="btn btn--outline" onClick={handleShare}>
+              Share report
+            </button>
             <Link to="/map" className="btn btn--primary">
               View on map
             </Link>
             <Link to="/report" className="btn btn--outline">
               + Report something else
             </Link>
+            {shareMessage ? (
+              <div className="share-feedback" role="status" aria-live="polite">
+                <p>{shareMessage}</p>
+                {shareFallbackUrl ? <input aria-label="Report link" readOnly value={shareFallbackUrl} onClick={(event) => event.currentTarget.select()} /> : null}
+              </div>
+            ) : null}
           </footer>
         </article>
 
@@ -475,19 +500,19 @@ export default function ReportDetails() {
             <h3 className="card__title">Status legend</h3>
             <ul className="legend-list">
               <li>
-                <StatusBadge status="Unverified" /> nobody has confirmed it yet
+                <StatusBadge status="Unverified" /> not yet verified
               </li>
               <li>
-                <StatusBadge status="In Progress" /> the concerned team is working on it
+                <StatusBadge status="In Progress" /> marked as being worked on
               </li>
               <li>
-                <StatusBadge status="Resolved" /> fixed / attended
+                <StatusBadge status="Resolved" /> marked as resolved
               </li>
               <li>
-                <StatusBadge status="Verified" /> checked and confirmed
+                <StatusBadge status="Verified" /> marked as verified
               </li>
             </ul>
-            <p className="muted small">Status is stored and updated by the Backend Team.</p>
+            <p className="muted small">Neighbour confirmations do not automatically change a report’s status.</p>
           </div>
 
           <div className="card">

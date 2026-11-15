@@ -1663,6 +1663,21 @@ code {
   border-top: 1px solid var(--slate-200);
 }
 
+.share-feedback {
+  flex-basis: 100%;
+  font-size: 0.9rem;
+  color: var(--slate-700);
+}
+.share-feedback p { margin: 0 0 6px; }
+.share-feedback input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-sm);
+  color: var(--slate-900);
+  background: #fff;
+}
+
 .details-side {
   display: flex;
   flex-direction: column;

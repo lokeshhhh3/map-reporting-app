@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { REPORT_TYPES } from '../utils/constants.js'
-import { formatLatLng } from '../utils/mapMath.js'
+import { MAX_PHOTO_MB, REPORT_TYPES } from '../utils/constants.js'
 import { distanceKm } from '../utils/geo.js'
 
 // ---------------------------------------------------------------------------
@@ -179,7 +178,7 @@ export default function ReportForm({
               </button>
             </div>
           ) : (
-            <span className="field__hint">JPG or PNG. It is uploaded when you submit (Backend Team handles storage).</span>
+            <span className="field__hint">Choose an image up to {MAX_PHOTO_MB} MB.</span>
           )}
         </div>
       </div>
@@ -192,7 +191,7 @@ export default function ReportForm({
             <>
               <p className="location-box__coords">
                 <strong>Pin placed</strong>
-                <code>{formatLatLng(location.lat, location.lng)}</code>
+                <span>Check the map to make sure it’s in the right place.</span>
               </p>
               <button type="button" className="btn btn--ghost btn--small" onClick={onClearLocation}>
                 Choose a different point
@@ -266,7 +265,7 @@ export default function ReportForm({
             ))}
           </ul>
           <p className="duplicate-warning__note">
-            You can still send your report - a moderator may merge them.
+            You can still send your report if it describes a different issue.
           </p>
         </div>
       ) : null}
@@ -276,7 +275,7 @@ export default function ReportForm({
           {submitting ? 'Submitting…' : submitLabel}
         </button>
         <p className="field__hint">
-          Your report is saved with the coordinates from the map, so it appears as a pin for everyone.
+          Your report and its pinned location can be seen by other visitors.
         </p>
       </div>
     </form>

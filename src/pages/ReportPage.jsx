@@ -5,7 +5,6 @@ import MapView from '../components/MapView.jsx'
 import ReportForm from '../components/ReportForm.jsx'
 import { StatusBadge, TypeBadge } from '../components/Badge.jsx'
 import useReports from '../hooks/useReports.js'
-import { formatLatLng } from '../utils/mapMath.js'
 import { getBrowserLocation, formatDistance } from '../utils/geo.js'
 
 // ---------------------------------------------------------------------------
@@ -112,12 +111,12 @@ export default function ReportPage() {
           <div className="location-readout">
             {selectedLocation ? (
               <>
-                <span className="pill pill--live">📍 Latitude &amp; Longitude</span>
-                <code>{formatLatLng(selectedLocation.lat, selectedLocation.lng)}</code>
+                <span className="pill pill--live">📍 Location selected</span>
+                <span>Check the pin on the map before submitting.</span>
               </>
             ) : (
               <p className="muted">
-                Tap or click anywhere on the map above. Those two numbers are what gets saved with your report.
+                Tap or click the map above to select the location for your report.
               </p>
             )}
           </div>
@@ -155,7 +154,7 @@ export default function ReportPage() {
                   <TypeBadge type={lastSubmitted.type} /> <StatusBadge status={lastSubmitted.status} />
                 </li>
                 <li>
-                  <code>{formatLatLng(lastSubmitted.lat, lastSubmitted.lng)}</code>
+                  Location saved on the map
                 </li>
               </ul>
             </div>
