@@ -17,3 +17,50 @@ body{background:#e7eae5;color:#28312c}h1,h2,h3,h4{color:#26342d}a{color:#3d6a5d}
 @media(max-width:900px){.site-sidebar{width:68px;padding:23px 8px}.site-brand{justify-content:center;padding:0}.site-brand__name,.site-sidebar__label,.site-sidebar__note,.site-nav__text{display:none}.site-nav__link{justify-content:center;padding:11px}.design-page .map-layout{display:flex;flex-direction:column}.design-page .map-layout__panel{order:0}.design-page .map-layout__map{order:1}.new-home__map-layout{grid-template-columns:1fr}.new-home__hero{height:460px}}
 @media(max-width:600px){.app-shell{display:block;padding-bottom:64px}.site-sidebar,.app-shell--navigate .site-sidebar{position:fixed;z-index:1100;bottom:0;left:0;right:0;width:100%;height:64px;min-height:0;padding:5px 3px;background:#fffefa;border:0;border-top:1px solid #e4e9e1;display:block}.site-brand,.site-sidebar__label,.site-sidebar__note,.site-mobile-create{display:none}.site-nav{display:flex;justify-content:space-around;gap:0}.site-nav__link,.app-shell--navigate .site-nav__link{flex:1;display:flex;flex-direction:column;gap:3px;padding:5px 1px;font-size:9px}.site-nav__text,.app-shell--navigate .site-nav__text{display:block}.site-nav__icon{font-size:16px}.site-topbar{height:56px;padding:0 14px;font-size:10px}.site-topbar__create{font-size:11px;padding:8px}.design-page{padding:24px 15px 35px}.page-header__title{font-size:1.65rem}.design-folders{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.design-page .card-grid{grid-template-columns:1fr}.new-home{padding:10px}.new-home__hero{height:450px;min-height:0;background-position:57% center}.new-home__intro{top:auto;left:12px;bottom:14px;width:250px;padding:14px}.new-home__intro h1{font-size:1.85rem}.new-home__route{top:14px;right:12px;bottom:auto;padding:10px}.new-home__route strong{font-size:.95rem}.new-home__content{padding:0 4px 15px}.new-home__shortcuts{grid-template-columns:1fr;gap:8px}.new-home__shortcuts a{padding:12px}.new-home__stats{grid-template-columns:repeat(2,1fr)}.new-home__stats div:nth-child(2){border-right:0}.new-home__stats div:nth-child(-n+2){border-bottom:1px solid #edf0e8}.new-home__updates{grid-template-columns:1fr}.new-home__map-layout{grid-template-columns:1fr}.footer__inner{padding-bottom:20px}.app-shell--navigate{padding-bottom:64px}.nav-page{height:calc(100dvh - 64px);min-height:500px}.nav-page__body{position:relative}.nav-page__map{height:auto;position:absolute}.nav-page__panel{top:auto;left:0;right:0;bottom:0;width:100%;max-width:100%;max-height:58%;border-radius:20px 20px 0 0;padding:16px;overflow-y:auto;box-shadow:0 -5px 20px #30463a22}.nav-sheet__handle{display:block;width:45px;height:4px;border-radius:4px;background:#cdd5ce;margin:-7px auto 3px;flex:none}.nav-page .nm-map__controls{top:13px}.nav-page .nav-page__locate{top:112px}.nav-page .leaflet-top.leaflet-right{top:160px}.nav-map-summary{display:none}.nav-sheet__open{top:auto;bottom:20px}.nav-page .nm-explore{max-height:75%;z-index:950}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important}}
+
+/* Discovered places: muted, category-shaped markers for the Navigate map. */
+.nm-place-pin {
+  --pin-fill: #c5dad1;
+  --pin-ink: #284b3f;
+  background: transparent;
+  border: 0;
+}
+.nm-place-pin--restaurants,.nm-place-pin--entertainment { --pin-fill: #f2b09b; --pin-ink: #633e33; }
+.nm-place-pin--cafes,.nm-place-pin--bakeries { --pin-fill: #f2d4bb; --pin-ink: #624735; }
+.nm-place-pin--parks { --pin-fill: #d9e7a6; --pin-ink: #3b5735; }
+.nm-place-pin--shopping,.nm-place-pin--atms { --pin-fill: #b9d4d1; --pin-ink: #294f4d; }
+.nm-place-pin--attractions { --pin-fill: #d6e5c0; --pin-ink: #3d583c; }
+.nm-place-pin--hospitals { --pin-fill: #f4c2b2; --pin-ink: #673f38; }
+.nm-place-pin--fuel { --pin-fill: #e8d5a4; --pin-ink: #594c2a; }
+.nm-place-pin__bubble {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 3px solid #fffefa;
+  border-radius: 50%;
+  color: var(--pin-ink);
+  background: var(--pin-fill);
+  box-shadow: 0 3px 10px #263f3740;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.nm-place-pin__bubble::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  bottom: -7px;
+  width: 7px;
+  height: 7px;
+  background: var(--pin-fill);
+  border-right: 2px solid #fffefa;
+  border-bottom: 2px solid #fffefa;
+  transform: rotate(45deg);
+}
+.nm-place-pin__bubble svg { width: 18px; height: 18px; position: relative; z-index: 1; }
+.nm-place-pin.is-selected .nm-place-pin__bubble {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 3px #315b4c, 0 5px 14px #263f3752;
+}
+.nm-place-pin:focus-visible .nm-place-pin__bubble { outline: 3px solid #315b4c; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .nm-place-pin__bubble { transition: none; } }

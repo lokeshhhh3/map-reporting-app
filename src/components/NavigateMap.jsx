@@ -61,18 +61,33 @@ function userIcon() {
   })
 }
 
-// A discovered place. It uses the colour of its group so you can tell a
-// cafe from a petrol pump just by looking at the map.
+// Place pins use simple, fixed SVGs and the site's softer palette. The
+// category ID is looked up in this local table rather than inserted into HTML.
+const PLACE_PIN_ICONS = {
+  restaurants: '<path d="M5 3v5M8 3v5M5 6h3M6.5 8v8M12 3v13M12 3c2 1 3 3 3 6h-3"/>',
+  cafes: '<path d="M3 5h9v5a4.5 4.5 0 0 1-9 0V5Zm9 1h1a2 2 0 0 1 0 4h-1M3 16h10"/>',
+  bakeries: '<path d="M9 16V4M9 8C5 8 5 5 5 4c2 0 4 1 4 4Zm0 3c4 0 4-3 4-4-2 0-4 1-4 4ZM6 16h6"/>',
+  shopping: '<path d="M4 7h10l1 9H3l1-9Zm3 0V5a2 2 0 0 1 4 0v2"/>',
+  attractions: '<path d="m2 15 5-8 3 4 2-3 4 7H2ZM12 3h.01"/>',
+  parks: '<path d="M9 16v-5M5 11h8L9 4l-4 7ZM6 16h6"/>',
+  entertainment: '<rect x="3" y="3" width="12" height="12" rx="3"/><path d="m7 6 5 3-5 3V6Z"/>',
+  hospitals: '<path d="M7 3h4v4h4v4h-4v4H7v-4H3V7h4V3Z"/>',
+  atms: '<rect x="2.5" y="4" width="13" height="10" rx="2"/><path d="M3 7h12M5 11h3"/>',
+  fuel: '<path d="M4 16V4h7v12M3 16h9M5 6h5v3H5zM11 8h2l1 2v4a1 1 0 0 0 2 0v-4l-1-2"/>',
+  other: '<circle cx="9" cy="9" r="3"/><path d="M9 2v2M9 14v2M2 9h2M14 9h2"/>',
+}
+
 function placeIcon(place, isSelected) {
-  const glyph = place.categoryIcon || '📍'
-  const color = place.categoryColor || '#7c3aed'
+  const category = Object.prototype.hasOwnProperty.call(PLACE_PIN_ICONS, place.categoryId)
+    ? place.categoryId : 'other'
+  const svg = `<svg viewBox="0 0 18 18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${PLACE_PIN_ICONS[category]}</svg>`
 
   return L.divIcon({
-    className: `nm-pin nm-pin--place ${isSelected ? 'is-selected' : ''}`,
-    html: `<span class="nm-pin__bubble" style="background:${color}"><span class="nm-pin__glyph">${glyph}</span></span>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 30],
-    tooltipAnchor: [0, -26],
+    className: `nm-place-pin nm-place-pin--${category}${isSelected ? ' is-selected' : ''}`,
+    html: `<span class="nm-place-pin__bubble">${svg}</span>`,
+    iconSize: [36, 42],
+    iconAnchor: [18, 41],
+    tooltipAnchor: [0, -38],
   })
 }
 
@@ -211,6 +226,8 @@ export default function NavigateMap({
       const isSelected = place.id === selectedPlaceId
       const marker = L.marker([place.lat, place.lng], {
         icon: placeIcon(place, isSelected),
+        title: place.name || 'Place',
+        alt: place.name || 'Place',
         zIndexOffset: isSelected ? 500 : 0,
       })
       marker.bindTooltip(
