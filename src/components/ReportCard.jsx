@@ -32,10 +32,10 @@ export default function ReportCard({ report, onSelect, compact = false, distance
         ) : null}
 
         <ul className="report-card__meta">
-          {distanceLabel ? <li className="report-card__distance">🧭 {distanceLabel} away</li> : null}
-          <li>📍 {report.locationName || 'Location on map'}</li>
-          <li>🕒 {formatDateTime(report.reportedAt)}</li>
-          {report.reportedBy ? <li>👤 {report.reportedBy}</li> : null}
+          {distanceLabel ? <li className="report-card__distance">{distanceLabel} away</li> : null}
+          <li>{report.locationName || 'Location on map'}</li>
+          <li>{formatDateTime(report.reportedAt)}</li>
+          {report.reportedBy ? <li>{report.reportedBy}</li> : null}
         </ul>
 
         <span className="link-arrow">View details →</span>

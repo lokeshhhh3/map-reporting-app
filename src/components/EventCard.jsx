@@ -30,9 +30,9 @@ export default function EventCard({ event }) {
         <h3 className="event-card__title">{event.name}</h3>
 
         <ul className="event-card__meta">
-          <li>📍 {event.location}</li>
-          <li>🗓️ {formatDate(event.date)}</li>
-          <li>⏰ {event.time}</li>
+          <li>{event.location}</li>
+          <li>{formatDate(event.date)}</li>
+          <li>{event.time}</li>
         </ul>
 
         <p className="event-card__text">{event.description}</p>
@@ -40,7 +40,7 @@ export default function EventCard({ event }) {
         {!isPast ? (
           <div className="event-card__calendar">
             <button type="button" className="btn btn--outline btn--small" onClick={handleAddToCalendar}>
-              📅 Add to calendar
+              Add to calendar
             </button>
             {calendarNote ? <small className="event-card__calendar-note">{calendarNote}</small> : null}
           </div>
