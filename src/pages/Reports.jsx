@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../components/PageHeader.jsx'
 import ReportCard from '../components/ReportCard.jsx'
 import ReportFilters from '../components/ReportFilters.jsx'
@@ -17,11 +17,19 @@ import { REPORT_TYPES } from '../utils/constants.js'
 export default function Reports() {
   const { reports, loading, error, reload } = useReports()
 
-  const [search, setSearch] = useState('')
-  const [type, setType] = useState('All')
+  // The homepage search box and type chips link here with ?q= and ?type=,
+  // so the page can open already filtered.
+  const [searchParams] = useSearchParams()
+  const [search, setSearch] = useState(searchParams.get('q') || '')
+  const [type, setType] = useState(searchParams.get('type') || 'All')
   const [status, setStatus] = useState('All')
   const [dateRange, setDateRange] = useState('all')
   const [sort, setSort] = useState('newest')
+
+  useEffect(() => {
+    setSearch(searchParams.get('q') || '')
+    setType(searchParams.get('type') || 'All')
+  }, [searchParams])
 
   const visibleReports = useMemo(() => {
     const text = search.trim().toLowerCase()

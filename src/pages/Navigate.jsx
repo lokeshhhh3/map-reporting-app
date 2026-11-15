@@ -41,17 +41,10 @@ import { formatDateTime } from '../utils/mapMath.js'
 // Public transport is NOT available without a paid Google Maps key, so it is
 // shown as disabled with an explanation instead of pretending to work.
 const TRAVEL_MODES = [
-  { id: 'driving', label: 'Driving', icon: 'car' },
-  { id: 'walking', label: 'Walking', icon: 'walk' },
-  { id: 'cycling', label: 'Cycling', icon: 'bike' },
+  { id: 'driving', label: 'Driving', icon: '🚗' },
+  { id: 'walking', label: 'Walking', icon: '🚶' },
+  { id: 'cycling', label: 'Cycling', icon: '🚲' },
 ]
-
-
-function ModeIcon({ kind }) {
-  if (kind === 'car') return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15v-3l2-5h12l2 5v3M4 15h16M4 15v2m16-2v2M6 12h12M7 15h.01M17 15h.01" /></svg>
-  if (kind === 'walk') return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="14" cy="4" r="1.6" /><path d="m10 21 2-6-2-3 2-5 3 2 2 3h3M12 7l-3 2-2 3M12 15l4 2 1 4" /></svg>
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="17" r="3.5"/><circle cx="19" cy="17" r="3.5"/><path d="m5 17 4-7 4 7H5m8 0 3-7h-3m-5-2h3m5 2 3 7"/></svg>
-}
 
 export default function NavigatePage() {
   const { reports, loading, error } = useReports()
@@ -72,6 +65,7 @@ export default function NavigatePage() {
   const [searching, setSearching] = useState(false)
   const [searchComplete, setSearchComplete] = useState(false)
   const [searchError, setSearchError] = useState('')
+  const [searchAttempt, setSearchAttempt] = useState(0)
 
   // ---- the route ----
   const [routes, setRoutes] = useState([]) // every route option we found
@@ -79,7 +73,6 @@ export default function NavigatePage() {
   const [routeLoading, setRouteLoading] = useState(false)
   const [routeError, setRouteError] = useState('')
   const [showAllSteps, setShowAllSteps] = useState(false)
-  const [sheetOpen, setSheetOpen] = useState(true)
 
   // ---- everything else ----
   const [mode, setMode] = useState('driving')
@@ -88,6 +81,8 @@ export default function NavigatePage() {
   const [locationError, setLocationError] = useState('')
   const [selectedReport, setSelectedReport] = useState(null)
   const [fitKey, setFitKey] = useState('')
+  // which tab of the side panel is open: the route list or the turn-by-turn steps
+  const [panelView, setPanelView] = useState('routes')
 
   // ---- Stage 4: the places that are on the way ----
   const [exploreOpen, setExploreOpen] = useState(false)
@@ -130,6 +125,23 @@ export default function NavigatePage() {
   // ONE search text, whichever box is active.
   const query = activeField === 'origin' ? originText : destinationText
 
+  function setQuery(value) {
+    if (activeField === 'origin') {
+      setOriginText(value)
+      if (origin && value !== origin.name) setOrigin(null)
+    } else {
+      setDestinationText(value)
+      if (destination && value !== destination.name) setDestination(null)
+    }
+  }
+
+  // Make a box active AND put the cursor in it.
+  function focusField(field) {
+    setActiveField(field)
+    // The browser needs the field to be active before we can focus it.
+    window.setTimeout(() => searchRef.current?.focus(), 0)
+  }
+
   // ------------------------------------------------------------------
   // PLACE SEARCH - waits until the user stops typing, then searches.
   // ------------------------------------------------------------------
@@ -160,14 +172,14 @@ export default function NavigatePage() {
       } finally {
         if (id === requestId.current) setSearching(false)
       }
-    }, 450)
+    }, 900)
 
     return () => {
       clearTimeout(timer)
       // Invalidate a request already in flight when the query changes or clears.
       if (requestId.current === id) requestId.current += 1
     }
-  }, [query, activeField, origin?.name, destination?.name])
+  }, [query, activeField, origin?.name, destination?.name, searchAttempt])
 
   // ------------------------------------------------------------------
   // THE ROUTE - recalculated whenever a point or the travel mode changes.
@@ -280,17 +292,23 @@ export default function NavigatePage() {
   // ------------------------------------------------------------------
   // "Use my location" - reuses the helper the report form already uses.
   // ------------------------------------------------------------------
-  async function handleLocate() {
+  async function handleLocate(asStart = false) {
     setLocating(true)
     setLocationError('')
     try {
       const position = await getBrowserLocation()
       setUserLocation(position)
-      setFocusPoint({ lat: position.lat, lng: position.lng, zoom: 14 })
+      if (asStart) {
+        setOrigin({ name: 'My location', address: 'Current position', lat: position.lat, lng: position.lng })
+        setOriginText('My location')
+        setActiveField('destination')
+        setFocusPoint(null)
+      } else {
+        setFocusPoint({ lat: position.lat, lng: position.lng, zoom: 14 })
+      }
       setFitKey((key) => `${key}|locate`)
     } catch (err) {
       setLocationError(err?.message || 'Could not get your location.')
-      setSheetOpen(true)
     } finally {
       setLocating(false)
     }
@@ -414,9 +432,11 @@ export default function NavigatePage() {
   }
 
   const mapPadding = useMemo(() => wideScreen
-    ? { paddingTopLeft: [sheetOpen ? 410 : 30, 35], paddingBottomRight: [exploreOpen ? 405 : 30, 35] }
-    : { paddingTopLeft: [25, 35], paddingBottomRight: [25, sheetOpen ? Math.round(window.innerHeight * 0.45) : 50] },
-    [wideScreen, sheetOpen, exploreOpen])
+    ? { paddingTopLeft: [375, 30], paddingBottomRight: [exploreOpen ? 405 : 30, 95] }
+    : { paddingTopLeft: [20, 30], paddingBottomRight: [20, 100] },
+    [wideScreen, exploreOpen])
+
+  const targetLabel = activeField === 'origin' ? 'Start' : 'Destination'
 
   // The exact extra time the stops add, once the route has been recalculated.
   const stopExtraMinutes =
@@ -427,179 +447,33 @@ export default function NavigatePage() {
     !(activeSelection && query.trim() === activeSelection.name) &&
     (searching || Boolean(searchError) || searchComplete)
 
+  // What a field shows right now.
+  function fieldValue(field) {
+    if (field === activeField && query.trim()) return query
+    const chosen = field === 'origin' ? origin : destination
+    return chosen ? chosen.name : ''
+  }
+
+  function fieldAddress(field) {
+    const chosen = field === 'origin' ? origin : destination
+    if (chosen) return chosen.address || 'Selected location'
+    if (field === activeField && query.trim()) return 'Choose a matching place above'
+    return ''
+  }
+
   const visibleSteps = activeRoute
     ? showAllSteps
       ? activeRoute.steps
       : activeRoute.steps.slice(0, 6)
     : []
 
+  const firstStep = activeRoute?.steps?.[0] || null
+
   return (
     <div className="nav-page">
       <div className="nav-page__body">
-        {sheetOpen ? <aside className="nav-page__panel" aria-label="Directions">
-          <div className="nav-sheet__handle" aria-hidden="true" />
-          <div className="nav-sheet__heading">
-            <h1 className="nav-page__title">Navigate</h1>
-            <button type="button" className="nav-sheet__close" onClick={() => setSheetOpen(false)} aria-label="Close directions">×</button>
-          </div>
-          <div className="nm-modes" role="group" aria-label="Travel mode">
-            {TRAVEL_MODES.map((item) => (
-              <button key={item.id} type="button" className={`nm-mode ${mode === item.id ? 'is-active' : ''}`}
-                title={item.label} onClick={() => { setMode(item.id); setFocusPoint(null) }} aria-label={item.label} aria-pressed={mode === item.id}>
-                <ModeIcon kind={item.icon} />
-              </button>
-            ))}
-          </div>
-          <div className="nav-sheet__fields">
-            {['origin', 'destination'].map((field) => {
-              const isOrigin = field === 'origin'
-              const value = isOrigin ? originText : destinationText
-              const chosen = isOrigin ? origin : destination
-              return <div className="nav-sheet__field" key={field}>
-                <span className={`nav-sheet__field-icon ${isOrigin ? 'is-origin' : 'is-destination'}`} aria-hidden="true">{isOrigin ? '➤' : '●'}</span>
-                <input ref={activeField === field ? searchRef : null} type="search" value={value}
-                  aria-label={isOrigin ? 'Search for a start' : 'Search for a destination'}
-                  placeholder={isOrigin ? 'Your location or starting point' : 'Choose destination'}
-                  onFocus={() => setActiveField(field)}
-                  onChange={(event) => {
-                    setActiveField(field)
-                    if (isOrigin) { setOriginText(event.target.value); if (origin && event.target.value !== origin.name) setOrigin(null) }
-                    else { setDestinationText(event.target.value); if (destination && event.target.value !== destination.name) setDestination(null) }
-                  }} />
-                {value ? <button type="button" className="nav-sheet__clear" onClick={() => clearField(field)} aria-label={isOrigin ? 'Clear the starting point' : 'Clear the destination'}>×</button> : null}
-                {chosen ? <span className="nav-sheet__chosen" aria-label="Location selected">✓</span> : null}
-              </div>
-            })}
-          </div>
-          {showSuggestions ? <ul className="nm-suggestions" aria-label="Place search results">
-            {searching ? <li className="nm-suggestions__empty" role="status">Searching…</li> : null}
-            {searchError ? <li className="nm-suggestions__error">{searchError}</li> : null}
-            {suggestions.map((place) => <li key={place.id}><button type="button" onClick={() => { pickSuggestion(place); window.setTimeout(() => searchRef.current?.focus(), 0) }}><strong>{place.name}</strong><span>{place.address}</span></button></li>)}
-            {!searching && !searchError && searchComplete && suggestions.length === 0 ? <li className="nm-suggestions__empty">No place found. Try a bigger name, like “Uppal, Hyderabad”.</li> : null}
-          </ul> : null}
-          <div className="nav-sheet__quick-actions">
-            <button type="button" onClick={swapEnds}>⇅ Swap</button>
-            <button type="button" onClick={async () => { if (userLocation) { useMyLocationAsStart(); return } setLocating(true); setLocationError(''); try { const position = await getBrowserLocation(); setUserLocation(position); setOrigin({ name: 'My location', address: 'Current position', lat: position.lat, lng: position.lng }); setOriginText('My location'); setFocusPoint(null); setFitKey((key) => `${key}|locate-start`) } catch (err) { setLocationError(err?.message || 'Could not get your location.') } finally { setLocating(false) } }} disabled={locating}>{locating ? 'Finding you…' : '➤ Use my location'}</button>
-          </div>
-          {locationError ? <p className="nm-note nm-note--warn" role="alert">{locationError}</p> : null}
-          {/* ---- THE ROUTE ---- */}
-          <div className="nm-route-card">
-            {routeLoading ? (
-              <>
-                <strong>Route</strong>
-                <p>Finding the best road route…</p>
-              </>
-            ) : null}
-
-            {!routeLoading && routeError ? (
-              <>
-                <strong>Route</strong>
-                <p className="nm-note nm-note--warn">{routeError}</p>
-              </>
-            ) : null}
-
-            {!routeLoading && !routeError && !activeRoute ? (
-              <>
-                <strong>Route</strong>
-                <p>Pick a start and a destination to see the route.</p>
-              </>
-            ) : null}
-
-            {!routeLoading && !routeError && activeRoute ? (
-              <>
-                <div className="nm-route-card__head">
-                  <strong>
-                    {formatDuration(activeRoute.durationMin)} · {formatKm(activeRoute.distanceKm)}
-                  </strong>
-                  <span>{activeMode?.label || 'Route'}</span>
-                </div>
-
-                {stops.length ? (
-                  <p className="nm-route-card__stops">
-                    📍 {stops.length} {stops.length === 1 ? 'stop' : 'stops'} added:
-                    {stops.map((stop) => stop.name).join(', ')}
-                  </p>
-                ) : null}
-
-                <button type="button" className="btn btn--primary btn--block nm-explore-btn" onClick={handleExplore}>
-                  🔍 Explore along this route
-                </button>
-
-                {routes.length > 1 ? (
-                  <div className="nm-route-options">
-                    {routes.map((route, index) => (
-                      <button
-                        key={route.id}
-                        type="button"
-                        className={`nm-route-option ${route.id === activeRoute.id ? 'is-active' : ''}`}
-                        onClick={() => setSelectedRouteId(route.id)}
-                      >
-                        <strong>{index === 0 ? 'Fastest' : `Option ${index + 1}`}</strong>
-                        <span>
-                          {formatDuration(route.durationMin)} · {formatKm(route.distanceKm)}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-
-                {activeRoute.steps.length ? (
-                  <ol className="nm-steps">
-                    {visibleSteps.map((step, index) => (
-                      <li key={`${step.instruction}-${index}`}>
-                        <span className="nm-steps__icon" aria-hidden="true">
-                          {step.type === 1 ? '🟢' : step.type === 4 ? '🏁' : '➡️'}
-                        </span>
-                        <span className="nm-steps__text">
-                          <strong>{step.instruction}</strong>
-                          <small>
-                            {step.distanceKm ? `${step.distanceKm.toFixed(1)} km` : ''}
-                            {step.street ? ` · ${step.street}` : ''}
-                          </small>
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
-                ) : null}
-
-                {activeRoute.steps.length > 6 ? (
-                  <button type="button" className="link-button" onClick={() => setShowAllSteps((value) => !value)}>
-                    {showAllSteps ? 'Show fewer steps' : `Show all ${activeRoute.steps.length} steps`}
-                  </button>
-                ) : null}
-              </>
-            ) : null}
-          </div>
-
-          {selectedReport ? (
-            <div className="nm-report-card">
-              {selectedReport.photoUrl ? (
-                <img src={selectedReport.photoUrl} alt="" className="nm-report-card__photo" />
-              ) : null}
-              <strong>{selectedReport.title}</strong>
-              <span className="nm-report-card__meta">
-                {selectedReport.type} · {selectedReport.status}
-              </span>
-              <p>{selectedReport.description}</p>
-              <span className="nm-report-card__meta">{selectedReport.locationName}</span>
-              <span className="nm-report-card__meta">{formatDateTime(selectedReport.reportedAt)}</span>
-              <Link to={`/reports/${selectedReport.id}`} className="btn btn--primary btn--block">
-                Open full report
-              </Link>
-            </div>
-          ) : null}
-
-          <div className="nm-panel-foot">
-            {loading ? <p className="nm-note">Loading community reports…</p> : null}
-            {error ? <p className="nm-note nm-note--warn">Could not load reports: {error}</p> : null}
-            {!loading && !error ? (
-              <p className="nm-note">{reports.length} community reports on the map</p>
-            ) : null}
-          </div>
-        </aside> : null}
-
+        {/* ---------------- THE MAP ---------------- */}
         <div className="nav-page__map">
-          {!sheetOpen ? <button type="button" className="nav-sheet__open" onClick={() => setSheetOpen(true)}>Directions</button> : null}
           <NavigateMap
             reports={reports}
             origin={origin}
@@ -612,19 +486,27 @@ export default function NavigatePage() {
             focusPoint={focusPoint}
             mapPadding={mapPadding}
             fitKey={fitKey}
-            onReportClick={(report) => { setSelectedReport(report); setSheetOpen(true) }}
+            onReportClick={(report) => setSelectedReport(report)}
             onPlaceClick={(place) => handleSelectPlace(place)}
           />
-          {!routeLoading && !routeError && activeRoute ? <div className="nav-map-summary"><div><strong>{formatDuration(activeRoute.durationMin)} · {formatKm(activeRoute.distanceKm)}</strong><span>{activeMode?.label} route</span></div><button type="button" className="btn btn--primary" onClick={handleExplore}>Explore along route</button></div> : null}
+
           <button
             type="button"
             className="nav-page__locate"
-            onClick={handleLocate}
+            onClick={() => handleLocate()}
             aria-label="Use my current location"
             title="Use my current location"
           >
             🎯
           </button>
+
+          <h2 className="nav-map-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path d="M12 2c3.9 0 7 3 7 6.8 0 4.7-7 13.2-7 13.2S5 13.5 5 8.8C5 5 8.1 2 12 2Z" />
+              <circle cx="12" cy="8.6" r="2.4" />
+            </svg>
+            {destination?.name || origin?.name || 'Hyderabad'}
+          </h2>
 
           {exploreOpen ? (
             <SmartExplorePanel
@@ -653,7 +535,403 @@ export default function NavigatePage() {
               mode={mode}
             />
           ) : null}
+
+          {/* ---------------- BOTTOM ROUTE BAR ---------------- */}
+          <div className="nav-summary">
+            <div className="nav-summary__top">
+              <span className="nav-summary__id">
+                Route
+                <span className={`nav-summary__chip ${activeRoute ? 'is-ready' : ''}`}>
+                  {activeRoute ? 'READY' : 'NEW'}
+                </span>
+              </span>
+              <button
+                type="button"
+                className="nav-summary__cta"
+                onClick={handleExplore}
+                disabled={!activeRoute}
+              >
+                Explore along route
+              </button>
+            </div>
+            <div className="nav-summary__meta">
+              <div>
+                <span>From</span>
+                <strong>{origin?.name || '—'}</strong>
+              </div>
+              <div>
+                <span>To</span>
+                <strong>{destination?.name || '—'}</strong>
+              </div>
+              <div>
+                <span>Distance</span>
+                <strong>{activeRoute ? formatKm(activeRoute.distanceKm) : '—'}</strong>
+              </div>
+              <div>
+                <span>Duration</span>
+                <strong>{activeRoute ? formatDuration(activeRoute.durationMin) : '—'}</strong>
+              </div>
+              <div>
+                <span>Mode</span>
+                <strong>{activeMode?.label || '—'}</strong>
+              </div>
+            </div>
+          </div>
         </div>
+
+        {/* ---------------- THE ROUTES PANEL ---------------- */}
+        <aside className="nav-page__panel">
+          <header className="nav-panel__head">
+            <span className="nav-panel__mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                <circle cx="12" cy="12" r="8.5" />
+                <path d="M3.5 12h17M12 3.5c3 3.2 3 13.8 0 17M12 3.5c-3 3.2-3 13.8 0 17" />
+              </svg>
+            </span>
+            <h1 className="nav-panel__title">Routes</h1>
+            <span className="nav-panel__count">
+              {!loading && !error ? `${reports.length} pins` : ''}
+            </span>
+          </header>
+
+          {/* search box */}
+          <div className="nav-panel__search">
+            <span className="nav-page__search-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m16.5 16.5 4 4" />
+              </svg>
+            </span>
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={`Search the ${targetLabel.toLowerCase()}…`}
+              aria-label={`Search for a ${targetLabel.toLowerCase()}`}
+            />
+            {searching ? <span className="nav-page__search-state">Searching…</span> : null}
+            {showSuggestions ? (
+              <ul className="nm-suggestions" aria-label="Place search results">
+                {searchError ? <li className="nm-suggestions__error" role="alert">{searchError} <button type="button" className="link-button" onClick={() => setSearchAttempt((attempt) => attempt + 1)}>Try again</button></li> : null}
+                {suggestions.map((place) => (
+                  <li key={place.id}>
+                    <button type="button" onClick={() => pickSuggestion(place)}>
+                      <strong>{place.name}</strong>
+                      <span>{place.address}</span>
+                    </button>
+                  </li>
+                ))}
+                {!searching && !searchError && searchComplete && suggestions.length === 0 ? (
+                  <li className="nm-suggestions__empty">
+                    No place found. Try a bigger name, like “Uppal, Hyderabad”.
+                  </li>
+                ) : null}
+              </ul>
+            ) : null}
+          </div>
+
+          {/* start + destination */}
+          <div className="nav-endpoints">
+            <div
+              className={`nav-endpoint ${activeField === 'origin' ? 'is-active' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => focusField('origin')}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  focusField('origin')
+                }
+              }}
+            >
+              <span className="nav-endpoint__dot nav-endpoint__dot--start" aria-hidden="true" />
+              <span className="nav-endpoint__text">
+                <span>From</span>
+                <strong>{fieldValue('origin') || 'Choose a starting point'}</strong>
+              </span>
+              {origin ? (
+                <button
+                  type="button"
+                  className="nav-endpoint__clear"
+                  aria-label="Clear the starting point"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    clearField('origin')
+                  }}
+                >
+                  ✕
+                </button>
+              ) : null}
+            </div>
+
+            <button type="button" className="nav-endpoints__swap" onClick={swapEnds} aria-label="Swap start and destination">
+              ⇅
+            </button>
+
+            <div
+              className={`nav-endpoint ${activeField === 'destination' ? 'is-active' : ''}`}
+              role="button"
+              tabIndex={0}
+              onClick={() => focusField('destination')}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  focusField('destination')
+                }
+              }}
+            >
+              <span className="nav-endpoint__dot nav-endpoint__dot--end" aria-hidden="true" />
+              <span className="nav-endpoint__text">
+                <span>To</span>
+                <strong>{fieldValue('destination') || 'Choose a destination'}</strong>
+              </span>
+              {destination ? (
+                <button
+                  type="button"
+                  className="nav-endpoint__clear"
+                  aria-label="Clear the destination"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    clearField('destination')
+                  }}
+                >
+                  ✕
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="nav-modes" role="group" aria-label="Travel mode">
+            {TRAVEL_MODES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`nav-mode ${mode === item.id ? 'is-active' : ''}`}
+                disabled={item.disabled}
+                title={item.note || item.label}
+                onClick={() => setMode(item.id)}
+                aria-pressed={mode === item.id}
+              >
+                <span aria-hidden="true">{item.icon}</span> {item.label}
+              </button>
+            ))}
+          </div>
+
+          <button type="button" className="nav-locate-row" onClick={() => handleLocate(true)} disabled={locating}>
+            {locating ? 'Finding you…' : 'Use my current location'}
+          </button>
+          {userLocation ? (
+            <button type="button" className="link-button nav-locate-link" onClick={useMyLocationAsStart}>
+              Use my location as the start
+            </button>
+          ) : null}
+          {locationError ? <p className="nm-note nm-note--warn">{locationError}</p> : null}
+
+          <div className="nav-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={panelView === 'routes'}
+              className={panelView === 'routes' ? 'is-active' : ''}
+              onClick={() => setPanelView('routes')}
+            >
+              Routes <span>{routes.length}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={panelView === 'directions'}
+              className={panelView === 'directions' ? 'is-active' : ''}
+              onClick={() => setPanelView('directions')}
+            >
+              Directions
+            </button>
+          </div>
+
+          {panelView === 'routes' ? (
+            <div className="nav-route-list">
+              {routeLoading ? <p className="nav-note">Finding the best road route…</p> : null}
+              {!routeLoading && routeError ? <p className="nm-note nm-note--warn">{routeError}</p> : null}
+              {!routeLoading && !routeError && routes.length === 0 ? (
+                <div className="nav-empty">
+                  <strong>No route yet</strong>
+                  <p>Search for a start and a destination above.</p>
+                </div>
+              ) : null}
+
+              {routes.map((route, index) => {
+                const isOpen = Boolean(activeRoute && route.id === activeRoute.id)
+                return (
+                  <article key={route.id} className={`route-card ${isOpen ? 'is-open' : ''}`}>
+                    <div className="route-card__top">
+                      <div className="route-card__names">
+                        <strong className="route-card__title">
+                          {origin?.name || 'Start'} → {destination?.name || 'Destination'}
+                        </strong>
+                      </div>
+                      <span className={`route-card__chip route-card__chip--${index === 0 ? 'fast' : 'alt'}`}>
+                        {index === 0 ? 'FASTEST' : 'ALTERNATE'}
+                      </span>
+                    </div>
+
+                    {isOpen ? (
+                      <>
+                        <span className="route-card__pill">
+                          {activeMode?.label} · {formatDuration(route.durationMin)}
+                        </span>
+
+                        <div className="route-card__meta">
+                          <div>
+                            <span>Distance</span>
+                            <strong>{formatKm(route.distanceKm)}</strong>
+                          </div>
+                          <div>
+                            <span>Duration</span>
+                            <strong>{formatDuration(route.durationMin)}</strong>
+                          </div>
+                          <div>
+                            <span>Mode</span>
+                            <strong>{activeMode?.label}</strong>
+                          </div>
+                          <div>
+                            <span>Stops</span>
+                            <strong>{stops.length}</strong>
+                          </div>
+                        </div>
+
+                        <div className="route-card__extra">
+                          <span className="route-card__avatar" aria-hidden="true">
+                            🧭
+                          </span>
+                          <span className="route-card__extra-text">
+                            <span>First turn</span>
+                            <strong>{firstStep ? firstStep.instruction : 'Start on the road'}</strong>
+                          </span>
+                          <button
+                            type="button"
+                            className="route-card__icon"
+                            onClick={handleExplore}
+                            title="Explore places along this route"
+                            aria-label="Explore places along this route"
+                          >
+                            🔍
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="route-card__foot"
+                          onClick={() => setPanelView('directions')}
+                        >
+                          Turn-by-turn directions <span aria-hidden="true">▾</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="route-card__expand"
+                        onClick={() => setSelectedRouteId(route.id)}
+                      >
+                        {formatDuration(route.durationMin)} · {formatKm(route.distanceKm)}
+                      </button>
+                    )}
+                  </article>
+                )
+              })}
+
+              {stops.length ? (
+                <div className="nav-stops">
+                  <span className="nav-stops__label">Stops ({stops.length})</span>
+                  <div className="nav-stops__list">
+                    {stops.map((stop) => (
+                      <span key={stop.id} className="nav-stop">
+                        {stop.name}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStop(stop.id)}
+                          aria-label={`Remove ${stop.name}`}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="nav-directions">
+              {activeRoute ? (
+                <>
+                  <div className="nav-directions__head">
+                    <strong>
+                      {formatDuration(activeRoute.durationMin)} · {formatKm(activeRoute.distanceKm)}
+                    </strong>
+                    <span>
+                      {activeRoute.steps.length} steps · {activeMode?.label}
+                    </span>
+                  </div>
+
+                  <ol className="nm-steps">
+                    {visibleSteps.map((step, index) => (
+                      <li key={`${step.instruction}-${index}`}>
+                        <span className="nm-steps__icon" aria-hidden="true">
+                          {step.type === 1 ? '🟢' : step.type === 4 ? '🏁' : '➡️'}
+                        </span>
+                        <span className="nm-steps__text">
+                          <strong>{step.instruction}</strong>
+                          <small>
+                            {step.distanceKm ? `${step.distanceKm.toFixed(1)} km` : ''}
+                            {step.street ? ` · ${step.street}` : ''}
+                          </small>
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+
+                  {activeRoute.steps.length > 6 ? (
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => setShowAllSteps((value) => !value)}
+                    >
+                      {showAllSteps ? 'Show fewer steps' : `Show all ${activeRoute.steps.length} steps`}
+                    </button>
+                  ) : null}
+                </>
+              ) : (
+                <div className="nav-empty">
+                  <strong>No directions yet</strong>
+                  <p>Choose a route first, then its steps appear here.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedReport ? (
+            <div className="nm-report-card">
+              {selectedReport.photoUrl ? (
+                <img src={selectedReport.photoUrl} alt="" className="nm-report-card__photo" />
+              ) : null}
+              <strong>{selectedReport.title}</strong>
+              <span className="nm-report-card__meta">
+                {selectedReport.type} · {selectedReport.status}
+              </span>
+              <p>{selectedReport.description}</p>
+              <span className="nm-report-card__meta">{selectedReport.locationName}</span>
+              <span className="nm-report-card__meta">{formatDateTime(selectedReport.reportedAt)}</span>
+              <Link to={`/reports/${selectedReport.id}`} className="btn btn--primary btn--block">
+                Open full report
+              </Link>
+            </div>
+          ) : null}
+
+          <div className="nm-panel-foot">
+            {loading ? <p className="nm-note">Loading community reports…</p> : null}
+            {error ? <p className="nm-note nm-note--warn">Could not load reports: {error}</p> : null}
+          </div>
+        </aside>
       </div>
     </div>
   )

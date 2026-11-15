@@ -1,15 +1,17 @@
 import { slugify } from '../utils/mapMath.js'
-import { TYPE_ICONS } from '../utils/constants.js'
 
 // ---------------------------------------------------------------------------
 // Badge.jsx  --  two tiny reusable labels used inside report cards.
+// The reference style keeps labels as quiet pastel pills, so the type badge
+// uses a small colour dot instead of an emoji.
 // ---------------------------------------------------------------------------
 
 /** The coloured label showing Complaint / Incident / Announcement / Event / Other. */
 export function TypeBadge({ type = 'Other' }) {
   return (
     <span className={`badge badge--type badge--${slugify(type)}`}>
-      <span aria-hidden="true">{TYPE_ICONS[type] || '📍'}</span> {type}
+      <span className={`type-chip__dot type-chip__dot--${slugify(type)}`} aria-hidden="true" />
+      {type}
     </span>
   )
 }
