@@ -44,13 +44,6 @@ const TRAVEL_MODES = [
   { id: 'driving', label: 'Driving', icon: '🚗' },
   { id: 'walking', label: 'Walking', icon: '🚶' },
   { id: 'cycling', label: 'Cycling', icon: '🚲' },
-  {
-    id: 'transit',
-    label: 'Transit',
-    icon: '🚇',
-    disabled: true,
-    note: 'Public transport routing needs the Google Maps Routes API, which requires a billing account. The free engine does driving, walking and cycling.',
-  },
 ]
 
 export default function NavigatePage() {
@@ -70,6 +63,7 @@ export default function NavigatePage() {
   // ---- the search ----
   const [suggestions, setSuggestions] = useState([])
   const [searching, setSearching] = useState(false)
+  const [searchComplete, setSearchComplete] = useState(false)
   const [searchError, setSearchError] = useState('')
 
   // ---- the route ----
@@ -129,8 +123,13 @@ export default function NavigatePage() {
   const query = activeField === 'origin' ? originText : destinationText
 
   function setQuery(value) {
-    if (activeField === 'origin') setOriginText(value)
-    else setDestinationText(value)
+    if (activeField === 'origin') {
+      setOriginText(value)
+      if (origin && value !== origin.name) setOrigin(null)
+    } else {
+      setDestinationText(value)
+      if (destination && value !== destination.name) setDestination(null)
+    }
   }
 
   // Make a box active AND put the cursor in it.
@@ -145,35 +144,39 @@ export default function NavigatePage() {
   // ------------------------------------------------------------------
   useEffect(() => {
     const text = query.trim()
+    const chosen = activeField === 'origin' ? origin : destination
+    const id = ++requestId.current
+    setSuggestions([])
+    setSearchError('')
+    setSearchComplete(false)
 
-    if (text.length < 3) {
-      setSuggestions([])
-      setSearchError('')
+    // A selected place is not a new search, even when its field is active.
+    if (text.length < 3 || (chosen && text === chosen.name)) {
       setSearching(false)
       return undefined
     }
 
     setSearching(true)
-    const id = requestId.current + 1
-    requestId.current = id
-
     const timer = setTimeout(async () => {
       try {
         const found = await searchPlaces(text)
-        if (id !== requestId.current) return // a newer search has started
+        if (id !== requestId.current) return
         setSuggestions(found)
-        setSearchError('')
+        setSearchComplete(true)
       } catch (err) {
         if (id !== requestId.current) return
-        setSuggestions([])
         setSearchError(err?.message || 'Place search failed. Please try again.')
       } finally {
         if (id === requestId.current) setSearching(false)
       }
-    }, 450) // 450ms of quiet typing before we search
+    }, 450)
 
-    return () => clearTimeout(timer)
-  }, [query])
+    return () => {
+      clearTimeout(timer)
+      // Invalidate a request already in flight when the query changes or clears.
+      if (requestId.current === id) requestId.current += 1
+    }
+  }, [query, activeField, origin?.name, destination?.name])
 
   // ------------------------------------------------------------------
   // THE ROUTE - recalculated whenever a point or the travel mode changes.
@@ -183,6 +186,7 @@ export default function NavigatePage() {
       setRoutes([])
       setSelectedRouteId('')
       setRouteError('')
+      setRouteLoading(false)
       return undefined
     }
 
@@ -419,8 +423,11 @@ export default function NavigatePage() {
   // The exact extra time the stops add, once the route has been recalculated.
   const stopExtraMinutes =
     baseDurationMin !== null && activeRoute ? activeRoute.durationMin - baseDurationMin : null
-  const showSuggestions = suggestions.length > 0 || searching || Boolean(searchError)
   const activeMode = TRAVEL_MODES.find((item) => item.id === mode)
+  const activeSelection = activeField === 'origin' ? origin : destination
+  const showSuggestions = query.trim().length >= 3 &&
+    !(activeSelection && query.trim() === activeSelection.name) &&
+    (searching || Boolean(searchError) || searchComplete)
 
   // What a field shows right now.
   function fieldValue(field) {
@@ -431,9 +438,9 @@ export default function NavigatePage() {
 
   function fieldAddress(field) {
     const chosen = field === 'origin' ? origin : destination
-    if (!chosen) return ''
-    if (field === activeField && query.trim()) return 'Keep typing…'
-    return chosen.address
+    if (chosen) return chosen.address || 'Selected location'
+    if (field === activeField && query.trim()) return 'Choose a matching place above'
+    return ''
   }
 
   const visibleSteps = activeRoute
@@ -459,6 +466,24 @@ export default function NavigatePage() {
             aria-label={`Search for a ${targetLabel.toLowerCase()}`}
           />
           {searching ? <span className="nav-page__search-state">Searching…</span> : null}
+          {showSuggestions ? (
+            <ul className="nm-suggestions" aria-label="Place search results">
+              {searchError ? <li className="nm-suggestions__error">{searchError}</li> : null}
+              {suggestions.map((place) => (
+                <li key={place.id}>
+                  <button type="button" onClick={() => pickSuggestion(place)}>
+                    <strong>{place.name}</strong>
+                    <span>{place.address}</span>
+                  </button>
+                </li>
+              ))}
+              {!searching && !searchError && searchComplete && suggestions.length === 0 ? (
+                <li className="nm-suggestions__empty">
+                  No place found. Try a bigger name, like “Uppal, Hyderabad”.
+                </li>
+              ) : null}
+            </ul>
+          ) : null}
         </div>
 
         <div className="nav-page__target" role="group" aria-label="What the search box will fill">
@@ -478,26 +503,6 @@ export default function NavigatePage() {
           </button>
         </div>
 
-        {showSuggestions ? (
-          <ul className="nm-suggestions">
-            {searchError ? <li className="nm-suggestions__error">{searchError}</li> : null}
-
-            {suggestions.map((place) => (
-              <li key={place.id}>
-                <button type="button" onClick={() => pickSuggestion(place)}>
-                  <strong>{place.name}</strong>
-                  <span>{place.address}</span>
-                </button>
-              </li>
-            ))}
-
-            {!searching && !searchError && suggestions.length === 0 ? (
-              <li className="nm-suggestions__empty">
-                No place found. Try a bigger name, like “Uppal, Hyderabad”.
-              </li>
-            ) : null}
-          </ul>
-        ) : null}
       </div>
 
       {/* ---------------- BODY: panel + map ---------------- */}
@@ -515,7 +520,10 @@ export default function NavigatePage() {
               className={`nm-field__box ${activeField === 'origin' ? 'is-active' : ''}`}
               onClick={() => focusField('origin')}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') focusField('origin')
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  focusField('origin')
+                }
               }}
               role="button"
               tabIndex={0}
@@ -552,7 +560,10 @@ export default function NavigatePage() {
               className={`nm-field__box ${activeField === 'destination' ? 'is-active' : ''}`}
               onClick={() => focusField('destination')}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') focusField('destination')
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  focusField('destination')
+                }
               }}
               role="button"
               tabIndex={0}
@@ -599,12 +610,12 @@ export default function NavigatePage() {
                 disabled={item.disabled}
                 title={item.note || item.label}
                 onClick={() => setMode(item.id)}
+                aria-pressed={mode === item.id}
               >
                 <span aria-hidden="true">{item.icon}</span> {item.label}
               </button>
             ))}
           </div>
-          {activeMode && activeMode.note ? <p className="nm-note">{activeMode.note}</p> : null}
 
           {/* ---- THE ROUTE ---- */}
           <div className="nm-route-card">
