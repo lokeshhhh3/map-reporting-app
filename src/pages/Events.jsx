@@ -25,14 +25,15 @@ export default function Events() {
   const visibleEvents = tab === 'Past' ? past : upcoming
 
   return (
-    <section className="container page">
+    <section className="container page design-page">
       <PageHeader
         eyebrow="What's coming up"
         title="College Events"
         subtitle="Technical fests, sports meets, cultural nights and social drives."
       />
 
-      <div className="tabs" role="tablist">
+      <div className="design-section-title"><h2>Browse events</h2></div>
+      <div className="tabs design-event-tabs" role="tablist">
         <button
           type="button"
           role="tab"
@@ -40,7 +41,7 @@ export default function Events() {
           className={tab === 'Upcoming' ? 'tab is-active' : 'tab'}
           onClick={() => setTab('Upcoming')}
         >
-          Upcoming <strong>{upcoming.length}</strong>
+          Upcoming <strong>{loading || error ? '—' : upcoming.length}</strong>
         </button>
         <button
           type="button"
@@ -49,10 +50,11 @@ export default function Events() {
           className={tab === 'Past' ? 'tab is-active' : 'tab'}
           onClick={() => setTab('Past')}
         >
-          Past <strong>{past.length}</strong>
+          Past <strong>{loading || error ? '—' : past.length}</strong>
         </button>
       </div>
 
+      <div className="design-section-title"><h2>{tab === 'Past' ? 'Past events' : 'Upcoming events'}</h2></div>
       {loading ? <Loader text="Loading events…" /> : null}
 
       {error ? <EmptyState icon="⚠️" title="Could not load events" message={error} /> : null}

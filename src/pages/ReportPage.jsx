@@ -86,7 +86,7 @@ export default function ReportPage() {
   }
 
   return (
-    <section className="container page">
+    <section className="container page design-page">
       <PageHeader
         eyebrow="Add to the map"
         title="Create a Report"

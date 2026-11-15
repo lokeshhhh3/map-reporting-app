@@ -128,6 +128,7 @@ export default function NavigateMap({
       scrollWheelZoom: true,
     })
 
+    map.attributionControl.setPosition('topright')
     L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map)
     map.setView(DEFAULT_CENTER, DEFAULT_ZOOM)
 
@@ -334,13 +335,13 @@ export default function NavigateMap({
     if (Array.isArray(routeLine) && routeLine.length >= 2) {
       const points = routeLine.map((point) => [point[0], point[1]])
       const casing = L.polyline(points, {
-        color: '#ffffff',
+        color: '#145bb8',
         weight: 9,
         opacity: 0.9,
         lineCap: 'round',
       }).addTo(map)
       const line = L.polyline(points, {
-        color: '#3d2bff',
+        color: '#087cf0',
         weight: 5,
         opacity: 1,
         lineCap: 'round',
@@ -400,10 +401,10 @@ export default function NavigateMap({
       }
     } else if (points.length === 1) {
       map.setView(points[0], 14, { animate: true })
+    } else if (hasPosition(userLocation)) {
+      map.setView([userLocation.lat, userLocation.lng], 14, { animate: true })
     }
-  }, [fitKey, origin, destination, routeLine, focusPoint, mapPadding])
-
-  const reportCount = reports.filter(hasPosition).length
+  }, [fitKey, origin, destination, routeLine, focusPoint, mapPadding, userLocation])
 
   return (
     <div className="nm-map">
@@ -418,7 +419,6 @@ export default function NavigateMap({
         </button>
       </div>
 
-      <span className="nm-map__count">{reportCount} community reports on this map</span>
     </div>
   )
 }

@@ -41,10 +41,17 @@ import { formatDateTime } from '../utils/mapMath.js'
 // Public transport is NOT available without a paid Google Maps key, so it is
 // shown as disabled with an explanation instead of pretending to work.
 const TRAVEL_MODES = [
-  { id: 'driving', label: 'Driving', icon: '🚗' },
-  { id: 'walking', label: 'Walking', icon: '🚶' },
-  { id: 'cycling', label: 'Cycling', icon: '🚲' },
+  { id: 'driving', label: 'Driving', icon: 'car' },
+  { id: 'walking', label: 'Walking', icon: 'walk' },
+  { id: 'cycling', label: 'Cycling', icon: 'bike' },
 ]
+
+
+function ModeIcon({ kind }) {
+  if (kind === 'car') return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15v-3l2-5h12l2 5v3M4 15h16M4 15v2m16-2v2M6 12h12M7 15h.01M17 15h.01" /></svg>
+  if (kind === 'walk') return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="14" cy="4" r="1.6" /><path d="m10 21 2-6-2-3 2-5 3 2 2 3h3M12 7l-3 2-2 3M12 15l4 2 1 4" /></svg>
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="17" r="3.5"/><circle cx="19" cy="17" r="3.5"/><path d="m5 17 4-7 4 7H5m8 0 3-7h-3m-5-2h3m5 2 3 7"/></svg>
+}
 
 export default function NavigatePage() {
   const { reports, loading, error } = useReports()
@@ -72,6 +79,7 @@ export default function NavigatePage() {
   const [routeLoading, setRouteLoading] = useState(false)
   const [routeError, setRouteError] = useState('')
   const [showAllSteps, setShowAllSteps] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(true)
 
   // ---- everything else ----
   const [mode, setMode] = useState('driving')
@@ -121,23 +129,6 @@ export default function NavigatePage() {
 
   // ONE search text, whichever box is active.
   const query = activeField === 'origin' ? originText : destinationText
-
-  function setQuery(value) {
-    if (activeField === 'origin') {
-      setOriginText(value)
-      if (origin && value !== origin.name) setOrigin(null)
-    } else {
-      setDestinationText(value)
-      if (destination && value !== destination.name) setDestination(null)
-    }
-  }
-
-  // Make a box active AND put the cursor in it.
-  function focusField(field) {
-    setActiveField(field)
-    // The browser needs the field to be active before we can focus it.
-    window.setTimeout(() => searchRef.current?.focus(), 0)
-  }
 
   // ------------------------------------------------------------------
   // PLACE SEARCH - waits until the user stops typing, then searches.
@@ -252,6 +243,7 @@ export default function NavigatePage() {
 
     setSuggestions([])
     setSearchError('')
+    setFocusPoint(null)
 
     // Move on to the other box, like a booking form does.
     setActiveField(activeField === 'origin' ? 'destination' : 'origin')
@@ -294,9 +286,11 @@ export default function NavigatePage() {
     try {
       const position = await getBrowserLocation()
       setUserLocation(position)
+      setFocusPoint({ lat: position.lat, lng: position.lng, zoom: 14 })
       setFitKey((key) => `${key}|locate`)
     } catch (err) {
       setLocationError(err?.message || 'Could not get your location.')
+      setSheetOpen(true)
     } finally {
       setLocating(false)
     }
@@ -311,6 +305,7 @@ export default function NavigatePage() {
       lng: userLocation.lng,
     })
     setOriginText('My location')
+    setFocusPoint(null)
     setFitKey((key) => `${key}|start-from-locate`)
   }
 
@@ -418,7 +413,10 @@ export default function NavigatePage() {
     setFocusPoint(null)
   }
 
-  const targetLabel = activeField === 'origin' ? 'Start' : 'Destination'
+  const mapPadding = useMemo(() => wideScreen
+    ? { paddingTopLeft: [sheetOpen ? 410 : 30, 35], paddingBottomRight: [exploreOpen ? 405 : 30, 35] }
+    : { paddingTopLeft: [25, 35], paddingBottomRight: [25, sheetOpen ? Math.round(window.innerHeight * 0.45) : 50] },
+    [wideScreen, sheetOpen, exploreOpen])
 
   // The exact extra time the stops add, once the route has been recalculated.
   const stopExtraMinutes =
@@ -429,20 +427,6 @@ export default function NavigatePage() {
     !(activeSelection && query.trim() === activeSelection.name) &&
     (searching || Boolean(searchError) || searchComplete)
 
-  // What a field shows right now.
-  function fieldValue(field) {
-    if (field === activeField && query.trim()) return query
-    const chosen = field === 'origin' ? origin : destination
-    return chosen ? chosen.name : ''
-  }
-
-  function fieldAddress(field) {
-    const chosen = field === 'origin' ? origin : destination
-    if (chosen) return chosen.address || 'Selected location'
-    if (field === activeField && query.trim()) return 'Choose a matching place above'
-    return ''
-  }
-
   const visibleSteps = activeRoute
     ? showAllSteps
       ? activeRoute.steps
@@ -451,172 +435,53 @@ export default function NavigatePage() {
 
   return (
     <div className="nav-page">
-      {/* ---------------- TOP BAR: the search box ---------------- */}
-      <div className="nav-page__top">
-        <div className="nav-page__search">
-          <span className="nav-page__search-icon" aria-hidden="true">
-            🔍
-          </span>
-          <input
-            ref={searchRef}
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={`Search a ${targetLabel.toLowerCase()} - try "Balanagar"`}
-            aria-label={`Search for a ${targetLabel.toLowerCase()}`}
-          />
-          {searching ? <span className="nav-page__search-state">Searching…</span> : null}
-          {showSuggestions ? (
-            <ul className="nm-suggestions" aria-label="Place search results">
-              {searchError ? <li className="nm-suggestions__error">{searchError}</li> : null}
-              {suggestions.map((place) => (
-                <li key={place.id}>
-                  <button type="button" onClick={() => pickSuggestion(place)}>
-                    <strong>{place.name}</strong>
-                    <span>{place.address}</span>
-                  </button>
-                </li>
-              ))}
-              {!searching && !searchError && searchComplete && suggestions.length === 0 ? (
-                <li className="nm-suggestions__empty">
-                  No place found. Try a bigger name, like “Uppal, Hyderabad”.
-                </li>
-              ) : null}
-            </ul>
-          ) : null}
-        </div>
-
-        <div className="nav-page__target" role="group" aria-label="What the search box will fill">
-          <button
-            type="button"
-            className={activeField === 'origin' ? 'is-active' : ''}
-            onClick={() => focusField('origin')}
-          >
-            Start
-          </button>
-          <button
-            type="button"
-            className={activeField === 'destination' ? 'is-active' : ''}
-            onClick={() => focusField('destination')}
-          >
-            Destination
-          </button>
-        </div>
-
-      </div>
-
-      {/* ---------------- BODY: panel + map ---------------- */}
       <div className="nav-page__body">
-        <aside className="nav-page__panel">
-          <h1 className="nav-page__title">Navigate</h1>
-          <p className="nav-page__lead">
-            Find a route, then see what is on the way — reports, events and places worth stopping at.
-          </p>
-
-          {/* ---- START ---- */}
-          <div className="nm-field">
-            <span className="nm-field__label">Start</span>
-            <div
-              className={`nm-field__box ${activeField === 'origin' ? 'is-active' : ''}`}
-              onClick={() => focusField('origin')}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  focusField('origin')
-                }
-              }}
-              role="button"
-              tabIndex={0}
-            >
-              <span className="nm-field__dot nm-field__dot--start" aria-hidden="true" />
-              <span className="nm-field__text">
-                <strong>{fieldValue('origin') || 'Choose a starting point'}</strong>
-                <small>{fieldAddress('origin') || 'Type in the search box above'}</small>
-              </span>
-              {origin ? (
-                <button
-                  type="button"
-                  className="nm-field__clear"
-                  aria-label="Clear the starting point"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    clearField('origin')
-                  }}
-                >
-                  ✕
-                </button>
-              ) : null}
-            </div>
+        {sheetOpen ? <aside className="nav-page__panel" aria-label="Directions">
+          <div className="nav-sheet__handle" aria-hidden="true" />
+          <div className="nav-sheet__heading">
+            <h1 className="nav-page__title">Navigate</h1>
+            <button type="button" className="nav-sheet__close" onClick={() => setSheetOpen(false)} aria-label="Close directions">×</button>
           </div>
-
-          <button type="button" className="nm-swap" onClick={swapEnds} aria-label="Swap start and destination">
-            ⇄
-          </button>
-
-          {/* ---- DESTINATION ---- */}
-          <div className="nm-field">
-            <span className="nm-field__label">Destination</span>
-            <div
-              className={`nm-field__box ${activeField === 'destination' ? 'is-active' : ''}`}
-              onClick={() => focusField('destination')}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  focusField('destination')
-                }
-              }}
-              role="button"
-              tabIndex={0}
-            >
-              <span className="nm-field__dot nm-field__dot--end" aria-hidden="true" />
-              <span className="nm-field__text">
-                <strong>{fieldValue('destination') || 'Choose a destination'}</strong>
-                <small>{fieldAddress('destination') || 'Type in the search box above'}</small>
-              </span>
-              {destination ? (
-                <button
-                  type="button"
-                  className="nm-field__clear"
-                  aria-label="Clear the destination"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    clearField('destination')
-                  }}
-                >
-                  ✕
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="nm-field nm-field--actions">
-            <button type="button" className="btn btn--outline btn--block" onClick={handleLocate} disabled={locating}>
-              {locating ? 'Finding you…' : '📍 Use my location'}
-            </button>
-            {userLocation ? (
-              <button type="button" className="link-button" onClick={useMyLocationAsStart}>
-                Use my location as the start
-              </button>
-            ) : null}
-            {locationError ? <p className="nm-note nm-note--warn">{locationError}</p> : null}
-          </div>
-
           <div className="nm-modes" role="group" aria-label="Travel mode">
             {TRAVEL_MODES.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`nm-mode ${mode === item.id ? 'is-active' : ''}`}
-                disabled={item.disabled}
-                title={item.note || item.label}
-                onClick={() => setMode(item.id)}
-                aria-pressed={mode === item.id}
-              >
-                <span aria-hidden="true">{item.icon}</span> {item.label}
+              <button key={item.id} type="button" className={`nm-mode ${mode === item.id ? 'is-active' : ''}`}
+                title={item.label} onClick={() => { setMode(item.id); setFocusPoint(null) }} aria-label={item.label} aria-pressed={mode === item.id}>
+                <ModeIcon kind={item.icon} />
               </button>
             ))}
           </div>
-
+          <div className="nav-sheet__fields">
+            {['origin', 'destination'].map((field) => {
+              const isOrigin = field === 'origin'
+              const value = isOrigin ? originText : destinationText
+              const chosen = isOrigin ? origin : destination
+              return <div className="nav-sheet__field" key={field}>
+                <span className={`nav-sheet__field-icon ${isOrigin ? 'is-origin' : 'is-destination'}`} aria-hidden="true">{isOrigin ? '➤' : '●'}</span>
+                <input ref={activeField === field ? searchRef : null} type="search" value={value}
+                  aria-label={isOrigin ? 'Search for a start' : 'Search for a destination'}
+                  placeholder={isOrigin ? 'Your location or starting point' : 'Choose destination'}
+                  onFocus={() => setActiveField(field)}
+                  onChange={(event) => {
+                    setActiveField(field)
+                    if (isOrigin) { setOriginText(event.target.value); if (origin && event.target.value !== origin.name) setOrigin(null) }
+                    else { setDestinationText(event.target.value); if (destination && event.target.value !== destination.name) setDestination(null) }
+                  }} />
+                {value ? <button type="button" className="nav-sheet__clear" onClick={() => clearField(field)} aria-label={isOrigin ? 'Clear the starting point' : 'Clear the destination'}>×</button> : null}
+                {chosen ? <span className="nav-sheet__chosen" aria-label="Location selected">✓</span> : null}
+              </div>
+            })}
+          </div>
+          {showSuggestions ? <ul className="nm-suggestions" aria-label="Place search results">
+            {searching ? <li className="nm-suggestions__empty" role="status">Searching…</li> : null}
+            {searchError ? <li className="nm-suggestions__error">{searchError}</li> : null}
+            {suggestions.map((place) => <li key={place.id}><button type="button" onClick={() => { pickSuggestion(place); window.setTimeout(() => searchRef.current?.focus(), 0) }}><strong>{place.name}</strong><span>{place.address}</span></button></li>)}
+            {!searching && !searchError && searchComplete && suggestions.length === 0 ? <li className="nm-suggestions__empty">No place found. Try a bigger name, like “Uppal, Hyderabad”.</li> : null}
+          </ul> : null}
+          <div className="nav-sheet__quick-actions">
+            <button type="button" onClick={swapEnds}>⇅ Swap</button>
+            <button type="button" onClick={async () => { if (userLocation) { useMyLocationAsStart(); return } setLocating(true); setLocationError(''); try { const position = await getBrowserLocation(); setUserLocation(position); setOrigin({ name: 'My location', address: 'Current position', lat: position.lat, lng: position.lng }); setOriginText('My location'); setFocusPoint(null); setFitKey((key) => `${key}|locate-start`) } catch (err) { setLocationError(err?.message || 'Could not get your location.') } finally { setLocating(false) } }} disabled={locating}>{locating ? 'Finding you…' : '➤ Use my location'}</button>
+          </div>
+          {locationError ? <p className="nm-note nm-note--warn" role="alert">{locationError}</p> : null}
           {/* ---- THE ROUTE ---- */}
           <div className="nm-route-card">
             {routeLoading ? (
@@ -640,7 +505,7 @@ export default function NavigatePage() {
               </>
             ) : null}
 
-            {activeRoute ? (
+            {!routeLoading && !routeError && activeRoute ? (
               <>
                 <div className="nm-route-card__head">
                   <strong>
@@ -731,9 +596,10 @@ export default function NavigatePage() {
               <p className="nm-note">{reports.length} community reports on the map</p>
             ) : null}
           </div>
-        </aside>
+        </aside> : null}
 
         <div className="nav-page__map">
+          {!sheetOpen ? <button type="button" className="nav-sheet__open" onClick={() => setSheetOpen(true)}>Directions</button> : null}
           <NavigateMap
             reports={reports}
             origin={origin}
@@ -744,11 +610,12 @@ export default function NavigatePage() {
             places={places}
             selectedPlaceId={selectedPlace ? selectedPlace.id : ''}
             focusPoint={focusPoint}
-            mapPadding={exploreOpen && wideScreen ? { paddingBottomRight: [400, 0] } : null}
+            mapPadding={mapPadding}
             fitKey={fitKey}
-            onReportClick={(report) => setSelectedReport(report)}
+            onReportClick={(report) => { setSelectedReport(report); setSheetOpen(true) }}
             onPlaceClick={(place) => handleSelectPlace(place)}
           />
+          {!routeLoading && !routeError && activeRoute ? <div className="nav-map-summary"><div><strong>{formatDuration(activeRoute.durationMin)} · {formatKm(activeRoute.distanceKm)}</strong><span>{activeMode?.label} route</span></div><button type="button" className="btn btn--primary" onClick={handleExplore}>Explore along route</button></div> : null}
           <button
             type="button"
             className="nav-page__locate"

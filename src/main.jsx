@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import App from './App.jsx'
 import './styles/index.css'
+import './styles/redesign.css'
 
 // main.jsx is the FIRST file the browser runs.
 // It finds <div id="root"> in index.html and puts our React app inside it.

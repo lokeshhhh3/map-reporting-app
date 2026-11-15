@@ -33,13 +33,17 @@ export default function News() {
   }, [news, category, search])
 
   return (
-    <section className="container page">
+    <section className="container page design-page">
       <PageHeader
         eyebrow="From the college"
         title="College News &amp; Announcements"
         subtitle="Exam notices, campus updates, placement drives and other announcements."
       />
 
+      {!loading && !error && categories.length > 1 ? <>
+        <div className="design-section-title"><h2>Browse news</h2><span>Choose a category</span></div>
+        <div className="design-folders" aria-label="News categories">{categories.slice(1).map((item, index) => <button type="button" key={item} className={`design-folder design-folder--${index % 3} ${category === item ? 'is-selected' : ''}`} onClick={() => setCategory(category === item ? 'All' : item)} aria-pressed={category === item}><strong>{item}</strong><span>{news.filter((entry) => entry.category === item).length} updates</span></button>)}</div>
+      </> : null}
       <div className="filters">
         <div className="filters__field filters__field--grow">
           <label htmlFor="news-search">Search news</label>
@@ -64,7 +68,7 @@ export default function News() {
         </div>
 
         <div className="filters__actions">
-          <span className="filters__count">{visibleNews.length} found</span>
+          {!loading && !error ? <span className="filters__count">{visibleNews.length} found</span> : null}
           <button
             type="button"
             className="btn btn--ghost"
@@ -78,6 +82,7 @@ export default function News() {
         </div>
       </div>
 
+      <div className="design-section-title"><h2>Latest news</h2></div>
       {loading ? <Loader text="Loading news…" /> : null}
 
       {error ? (

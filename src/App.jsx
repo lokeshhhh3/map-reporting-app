@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Navbar from './components/Navbar.jsx'
 import Footer from './components/Footer.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
@@ -15,10 +15,12 @@ import NotFound from './pages/NotFound.jsx'
 // App.jsx is the SHELL of the website: the parts that are always visible
 // (Navbar + Footer) plus the list of pages (called "routes").
 export default function App() {
+  const isNavigate = useLocation().pathname === '/navigate'
   return (
-    <div className="app-shell">
+    <div className={`app-shell${isNavigate ? ' app-shell--navigate' : ''}`}>
       <Navbar />
-
+      <div className="site-main">
+      <div className="site-topbar"><span>✳ &nbsp; Your neighbourhood, all in one place</span><Link to="/report" className="site-topbar__create">+ Create report</Link></div>
       <main className="app-main">
         {/* The ErrorBoundary catches any mistake in any page, so a small
             bug shows a friendly message instead of a blank white screen. */}
@@ -44,7 +46,8 @@ export default function App() {
         </ErrorBoundary>
       </main>
 
-      <Footer />
+      {!isNavigate ? <Footer /> : null}
+      </div>
     </div>
   )
 }

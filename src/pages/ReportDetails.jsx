@@ -176,7 +176,7 @@ export default function ReportDetails() {
 
   if (loading) {
     return (
-      <section className="container page">
+      <section className="container page design-page">
         <Loader text="Loading report…" />
       </section>
     )
@@ -184,7 +184,7 @@ export default function ReportDetails() {
 
   if (error) {
     return (
-      <section className="container page">
+      <section className="container page design-page">
         <EmptyState icon="⚠️" title="Something went wrong" message={error} actionLabel="Back to reports" actionTo="/reports" />
       </section>
     )
@@ -192,7 +192,7 @@ export default function ReportDetails() {
 
   if (!report) {
     return (
-      <section className="container page">
+      <section className="container page design-page">
         <EmptyState
           icon="🔍"
           title="Report not found"
@@ -266,7 +266,7 @@ export default function ReportDetails() {
   }
 
   return (
-    <section className="container page">
+    <section className="container page design-page">
       <nav className="breadcrumb" aria-label="Breadcrumb">
         <Link to="/reports">Reports</Link>
         <span aria-hidden="true">/</span>
