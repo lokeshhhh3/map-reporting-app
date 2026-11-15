@@ -8,173 +8,49 @@ import EmptyState from '../components/EmptyState.jsx'
 import useReports from '../hooks/useReports.js'
 import useAsyncData from '../hooks/useAsyncData.js'
 import { getEvents, getNews } from '../services/api.js'
+import landscape from '../assets/community-landscape.jpg'
 
-// ---------------------------------------------------------------------------
-// HOME PAGE  (Step 3 of the plan)
-// An introduction, route planner callout, map preview, and community updates.
-// ---------------------------------------------------------------------------
 export default function Home() {
   const navigate = useNavigate()
   const { reports, loading, error } = useReports()
-  const { data: news } = useAsyncData(getNews)
+  const { data: news, loading: newsLoading, error: newsError } = useAsyncData(getNews)
   const { data: events, loading: eventsLoading, error: eventsError } = useAsyncData(getEvents)
+  const stats = useMemo(() => ({
+    total: reports.length,
+    open: reports.filter((report) => report.status !== 'Resolved').length,
+    resolved: reports.filter((report) => report.status === 'Resolved').length,
+    upcoming: events.filter((event) => String(event.status).toLowerCase() !== 'past').length,
+  }), [reports, events])
 
-  // A few numbers for the small statistics strip.
-  const stats = useMemo(() => {
-    const open = reports.filter((report) => report.status !== 'Resolved').length
-    const resolved = reports.filter((report) => report.status === 'Resolved').length
-    const upcoming = events.filter((event) => String(event.status).toLowerCase() !== 'past').length
-    return { total: reports.length, open, resolved, upcoming }
-  }, [reports, events])
-
-  return (
-    <div className="home">
-      {/* ---------- hero ---------- */}
-      <section className="hero">
-        <div className="container hero__inner">
-          <div className="hero__text">
-            <p className="hero__eyebrow">📍 Shared map · College + neighbourhood</p>
-            <h1>See what is happening around you.</h1>
-            <p className="hero__subtitle">
-              Report a damaged road, a water problem, an incident, a college event — put a pin on the exact
-              spot and everyone can see it on one shared map.
-            </p>
-            <div className="hero__actions">
-              <Link to="/map" className="btn btn--primary btn--large">
-                Open the Map
-              </Link>
-            </div>
-          </div>
-
-          <ul className="stat-strip">
-            <li>
-              <StatValue value={stats.total} loading={loading} error={error} />
-              <span>Total reports</span>
-            </li>
-            <li>
-              <StatValue value={stats.open} loading={loading} error={error} />
-              <span>Open / in progress</span>
-            </li>
-            <li>
-              <StatValue value={stats.resolved} loading={loading} error={error} />
-              <span>Resolved</span>
-            </li>
-            <li>
-              <StatValue value={stats.upcoming} loading={eventsLoading} error={eventsError} />
-              <span>Upcoming events</span>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="container">
-        {/* Show the route planner without repeating the navigation menu. */}
-        <section className="section home-route" aria-labelledby="home-route-title">
-          <div>
-            <p className="home-route__eyebrow">MORE THAN A MAP</p>
-            <h2 id="home-route-title">Find your way. Discover what’s along it.</h2>
-            <p>Plan a drive, walk or cycle, see directions and explore places near your route.</p>
-          </div>
-          <Link to="/navigate" className="btn btn--primary btn--large">Plan a route →</Link>
-        </section>
-
-        {/* ---------- map + nearby ---------- */}
-        <section className="section">
-          <div className="section__head">
-            <div>
-              <h2 className="section__title">Main map</h2>
-              <p className="section__subtitle">Click a pin to open that report.</p>
-            </div>
-            <Link to="/map" className="link-arrow">
-              Go to full map →
-            </Link>
-          </div>
-
-          <div className="home__map-layout">
-            {loading ? <Loader text="Loading map pins…" /> : null}
-            {error ? <EmptyState icon="⚠️" title="Could not load reports" message={error} /> : null}
-
-            {!loading && !error ? (
-              <MapView
-                reports={reports}
-                height="440px"
-                onMarkerClick={(report) => navigate(`/reports/${report.id}`)}
-              />
-            ) : null}
-
-            <aside className="home__side card">
-              <h3 className="card__title">Latest reports</h3>
-              {loading ? <Loader /> : null}
-              {!loading && !error && reports.length === 0 ? (
-                <EmptyState icon="📍" title="No reports yet" message="Be the first to report something." actionLabel="Create Report" actionTo="/report" />
-              ) : null}
-              <div className="home__side-list">
-                {reports.slice(0, 5).map((report) => (
-                  <Link key={report.id} to={`/reports/${report.id}`} className="mini-report">
-                    <span className={`mini-report__dot dot--${String(report.type).toLowerCase()}`} aria-hidden="true" />
-                    <span>
-                      <strong>{report.title}</strong>
-                      <small>
-                        {report.type} · {report.status}
-                      </small>
-                    </span>
-                  </Link>
-                ))}
-              </div>
-              <Link to="/reports" className="btn btn--ghost btn--block">
-                See all reports
-              </Link>
-            </aside>
-          </div>
-        </section>
-
-        {/* ---------- news + events preview ---------- */}
-        <section className="section">
-          <div className="two-column">
-            <div>
-              <div className="section__head">
-                <h2 className="section__title">News &amp; Announcements</h2>
-                <Link to="/news" className="link-arrow">
-                  All news →
-                </Link>
-              </div>
-              <div className="stack">
-                {news.slice(0, 2).map((item) => (
-                  <NewsCard key={item.id} item={item} />
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <div className="section__head">
-                <h2 className="section__title">Events</h2>
-                <Link to="/events" className="link-arrow">
-                  All events →
-                </Link>
-              </div>
-              <div className="stack">
-                {events.slice(0, 2).map((event) => (
-                  <EventCard key={event.id} event={event} />
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
+  return <div className="new-home">
+    <section className="new-home__hero" style={{ backgroundImage: `url(${landscape})` }} aria-label="Welcome">
+      <span className="new-home__brand">✳ &nbsp; MAP REPORTING APP</span>
+      <div className="new-home__pin new-home__pin--one" aria-hidden="true">⚑</div>
+      <div className="new-home__pin new-home__pin--two" aria-hidden="true">⌁</div>
+      <div className="new-home__intro"><h1>Know your<br /><strong>neighbourhood.</strong></h1><p>Explore the map, share a report and keep up with what’s happening around you.</p><Link className="btn btn--primary" to="/map">Explore the map ↗</Link></div>
+      <div className="new-home__route"><small>✳ &nbsp; FIND YOUR WAY</small><strong>Go somewhere<br />good.</strong><Link to="/navigate">Open Navigate →</Link></div>
+    </section>
+    <div className="new-home__content">
+      <div className="new-home__shortcuts">
+        <Link to="/map"><span>⌖</span><div><strong>Explore your map</strong><small>See what’s happening nearby.</small></div></Link>
+        <Link to="/report"><span>⚑</span><div><strong>Share a report</strong><small>Let your community know.</small></div></Link>
+        <Link to="/navigate"><span>➤</span><div><strong>Find a route</strong><small>Discover places along the way.</small></div></Link>
       </div>
+      <section className="new-home__section" aria-label="Community statistics"><div className="new-home__stats">
+        <Stat label="Total reports" value={stats.total} loading={loading} error={error} />
+        <Stat label="Open / in progress" value={stats.open} loading={loading} error={error} />
+        <Stat label="Resolved" value={stats.resolved} loading={loading} error={error} />
+        <Stat label="Events not marked past" value={stats.upcoming} loading={eventsLoading} error={eventsError} />
+      </div></section>
+      <section className="new-home__section"><div className="new-home__heading"><div><h2>Explore the map</h2><p>Click a pin to open a report.</p></div><Link to="/map">Full map →</Link></div>
+        <div className="new-home__map-layout"><div>{loading ? <Loader text="Loading map pins…" /> : null}{error ? <EmptyState icon="⚠️" title="Could not load reports" message={error} /> : null}{!loading && !error ? <MapView reports={reports} height="400px" onMarkerClick={(report) => navigate(`/reports/${report.id}`)} /> : null}</div>
+        <aside className="new-home__latest"><h3>Latest reports</h3>{loading ? <Loader text="Loading reports…" /> : null}{error ? <p role="alert">Reports are unavailable.</p> : null}{!loading && !error && !reports.length ? <p>No reports yet.</p> : null}{!loading && !error ? reports.slice(0, 5).map((report) => <Link key={report.id} to={`/reports/${report.id}`}><strong>{report.title}</strong><small>{report.type} · {report.status}</small></Link>) : null}<Link className="new-home__more" to="/reports">All reports →</Link></aside></div>
+      </section>
+      <section className="new-home__section new-home__updates"><div><div className="new-home__heading"><h2>News &amp; announcements</h2><Link to="/news">All news →</Link></div>{newsLoading ? <Loader text="Loading news…" /> : null}{newsError ? <p role="alert">Could not load news: {newsError}</p> : null}{!newsLoading && !newsError && !news.length ? <p>No news available.</p> : null}<div className="stack">{!newsLoading && !newsError ? news.slice(0, 2).map((item) => <NewsCard key={item.id} item={item} />) : null}</div></div>
+      <div><div className="new-home__heading"><h2>Events</h2><Link to="/events">All events →</Link></div>{eventsLoading ? <Loader text="Loading events…" /> : null}{eventsError ? <p role="alert">Could not load events: {eventsError}</p> : null}{!eventsLoading && !eventsError && !events.length ? <p>No events available.</p> : null}<div className="stack">{!eventsLoading && !eventsError ? events.slice(0, 2).map((event) => <EventCard key={event.id} event={event} />) : null}</div></div></section>
     </div>
-  )
+  </div>
 }
-
-// Loading is different from a genuine count of zero or an unavailable count.
-function StatValue({ value, loading, error }) {
-  if (loading) {
-    return (
-      <strong aria-label="Loading count">
-        <span className="stat-strip__skeleton" aria-hidden="true" />
-      </strong>
-    )
-  }
-  if (error) return <strong aria-label="Count unavailable">—</strong>
-  return <strong>{value}</strong>
+function Stat({ label, value, loading, error }) {
+  return <div><strong>{loading ? '…' : error ? '—' : value}</strong><span>{label}</span></div>
 }

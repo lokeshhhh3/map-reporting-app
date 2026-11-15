@@ -27,6 +27,7 @@ export default function ReportFilters({
   status = 'All',
   onStatusChange,
   showStatus = true,
+  showOpenOption = false,
 
   // --- date range ---
   dateRange = 'all',
@@ -75,6 +76,7 @@ export default function ReportFilters({
           <label htmlFor="filter-status">Status</label>
           <select id="filter-status" value={status} onChange={(event) => onStatusChange(event.target.value)}>
             <option value="All">All statuses</option>
+            {showOpenOption ? <option value="Open">Open / not resolved</option> : null}
             {REPORT_STATUSES.map((item) => (
               <option key={item} value={item}>
                 {item}

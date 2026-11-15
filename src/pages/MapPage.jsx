@@ -98,7 +98,7 @@ export default function MapPage() {
   }
 
   return (
-    <section className="container page">
+    <section className="container page design-page">
       <PageHeader
         eyebrow="Live view"
         title="Map"
@@ -129,7 +129,7 @@ export default function MapPage() {
         onUseMyLocation={handleUseMyLocation}
         locating={locating}
         nearMeLabel={userLocation ? '📍 Near me · sorted' : '📍 Near me'}
-        resultCount={filteredReports.length}
+        resultCount={!loading && !error ? filteredReports.length : undefined}
         onReset={resetFilters}
       />
       </details>
