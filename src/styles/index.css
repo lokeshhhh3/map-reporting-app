@@ -1479,8 +1479,10 @@ code {
 
 /* ---- ReportCard ---- */
 .report-card {
+  --report-accent: var(--slate-500);
   background: #fff;
   border: 1px solid var(--slate-200);
+  border-top: 4px solid var(--report-accent);
   border-radius: var(--radius);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
@@ -1488,10 +1490,16 @@ code {
   display: flex;
 }
 
+.report-card--complaint { --report-accent: var(--red-600); }
+.report-card--incident { --report-accent: #ea580c; }
+.report-card--announcement { --report-accent: var(--blue-600); }
+.report-card--event { --report-accent: var(--purple-600); }
+.report-card--other { --report-accent: var(--slate-500); }
+
 .report-card:hover {
   transform: translateY(-3px);
   box-shadow: var(--shadow-lg);
-  border-color: var(--blue-500);
+  border-color: var(--report-accent);
 }
 
 .report-card__clickable {
@@ -1517,22 +1525,6 @@ code {
   height: 165px;
   object-fit: cover;
   background: var(--slate-100);
-}
-
-.report-card__photo--empty {
-  display: grid;
-  place-items: center;
-  gap: 2px;
-  color: var(--slate-500);
-  background: repeating-linear-gradient(45deg, #f8fafc, #f8fafc 10px, #f1f5f9 10px, #f1f5f9 20px);
-}
-
-.report-card__photo--empty span {
-  font-size: 1.8rem;
-}
-
-.report-card__photo--empty small {
-  font-size: 0.72rem;
 }
 
 .report-card__body {

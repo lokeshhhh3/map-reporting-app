@@ -354,11 +354,7 @@ export default function ReportDetails() {
 
           {report.photoUrl ? (
             <img className="details-main__photo" src={report.photoUrl} alt={`Photo for ${report.title}`} />
-          ) : (
-            <div className="details-main__photo details-main__photo--empty">
-              No photo was added to this report.
-            </div>
-          )}
+          ) : null}
 
           <section className="details-section">
             <h2>Description</h2>
